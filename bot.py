@@ -90,12 +90,13 @@ def create_xlsx_file(product_name: str, package_text: str, user_id: int) -> str:
     ws.column_dimensions["D"].width = 30
     ws.column_dimensions["E"].width = 30
 
-    for row in ws.iter_rows():
-        for cell in row:
-            cell.alignment = Alignment(wrap_text=True)
-
     row_data = [product_name, parts["heading"], parts["description"], parts["keywords"], parts["hashtags"]]
     ws.append(row_data)
+
+    for cell in ws[2]:
+        cell.alignment = Alignment(wrap_text=True)
+
+    ws.row_dimensions[2].height = None
 
     xlsx_path = f"temp_{user_id}.xlsx"
     wb.save(xlsx_path)
