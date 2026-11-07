@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, LabeledPrice
 
-from app import generate_description
+from app import generate_description, generate_full_package
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 DATA_FILE = "users.json"
@@ -38,8 +38,12 @@ async def cmd_start(message: Message):
     balance = user_access.get(user_id, 0)
     
     await message.answer(
-        f"Привет! Я генерирую продающие описания для карточек товаров.\n"
-        f"Отправь мне название товара, и я напишу текст.\n\n"
+        f"Привет! Я генерирую полный пакет для карточек товаров:\n"
+        f"• Заголовок\n"
+        f"• Продающее описание\n"
+        f"• Ключевые слова\n"
+        f"• Хэштеги\n\n"
+        f"Отправь мне название товара, и я сделаю всё за 5 секунд!\n\n"
         f"Ваш баланс: {balance} генераций.",
         reply_markup=keyboard
     )
@@ -48,8 +52,8 @@ async def cmd_start(message: Message):
 async def process_buy(callback_query: types.CallbackQuery):
     await bot.send_invoice(
         chat_id=callback_query.message.chat.id,
-        title="10 генераций описаний",
-        description="Пакет из 10 генераций продающих описаний для карточек товаров",
+        title="10 генераций полного пакета",
+        description="Пакет из 10 генераций полного пакета для карточек товаров",
         payload="10_generations_payload",
         currency="XTR",
         prices=[LabeledPrice(label="10 генераций", amount=50)]
@@ -63,11 +67,10 @@ async def process_pre_checkout(pre_checkout_query: PreCheckoutQuery):
 @router.message(lambda message: message.successful_payment)
 async def process_successful_payment(message: Message):
     user_id = str(message.from_user.id)
-    # Начисляем 10 генераций
     user_access[user_id] = user_access.get(user_id, 0) + 10
     save_access(user_access)
     
-    await message.answer("Оплата прошла успешно! Теперь вы можете сгенерировать 10 описаний.")
+    await message.answer("Оплата прошла успешно! Теперь вы можете сгенерировать 10 полных пакетов.")
 
 @router.message()
 async def handle_text(message: Message):
@@ -80,14 +83,13 @@ async def handle_text(message: Message):
         await message.answer("У вас закончились генерации. Купите еще 10 за 50 Stars.", reply_markup=keyboard)
         return
 
-    # Уменьшаем счетчик, сохраняем и генерируем
     user_access[user_id] -= 1
     save_access(user_access)
     
     product_name = message.text
-    description = generate_description(product_name)
+    package = generate_full_package(product_name)
     
-    await message.answer(description)
+    await message.answer(package)
     await message.answer(f"Хочешь сгенерировать ещё? У тебя осталось {user_access[user_id]} генераций.")
 
 dp.include_router(router)
