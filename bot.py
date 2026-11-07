@@ -96,11 +96,12 @@ def create_xlsx_file(product_name: str, package_text: str, user_id: int) -> str:
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         cell.border = thin_border
 
+    # --- ИСПРАВЛЕННАЯ ШИРИНА КОЛОНОК ---
     ws.column_dimensions["A"].width = 20
-    ws.column_dimensions["B"].width = 35
-    ws.column_dimensions["C"].width = 70
-    ws.column_dimensions["D"].width = 35
-    ws.column_dimensions["E"].width = 35
+    ws.column_dimensions["B"].width = 30
+    ws.column_dimensions["C"].width = 55
+    ws.column_dimensions["D"].width = 30
+    ws.column_dimensions["E"].width = 25
 
     row_data = [product_name, parts["heading"], parts["description"], parts["keywords"], parts["hashtags"]]
     ws.append(row_data)
