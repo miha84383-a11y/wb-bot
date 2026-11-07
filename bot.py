@@ -5,9 +5,9 @@ import csv
 from datetime import datetime
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, PreCheckoutQuery, LabeledPrice
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, LabeledPrice, FSInputFile
 
-from app import generate_full_package
+from app import generate_full_package  # <-- ЭТОТ ИМПОРТ БЫЛ ПРОПУЩЕН
 
 # --- Конфигурация ---
 ADMIN_ID = 860288063  # Ваш Telegram ID
@@ -30,23 +30,24 @@ def load_access():
 
 def save_access(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-def load_history():
+user_access = load_access()
+
+def load_history() -> dict:
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
-def save_history(history):
+def save_history(history: dict):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
-user_access = load_access()
 history = load_history()
 
 # --- Парсинг пакета ---
-def parse_package(package_text: str):
+def parse_package(package_text: str) -> dict:
     sections = {"heading": "", "description": "", "keywords": "", "hashtags": ""}
     current = None
     for line in package_text.splitlines():
@@ -68,21 +69,23 @@ def parse_package(package_text: str):
             continue
         if current and stripped:
             sections[current] += stripped + " "
-    for key in sections:
-        sections[key] = sections[key].strip()
+    sections["heading"] = sections["heading"].strip()
+    sections["description"] = sections["description"].strip()
+    sections["keywords"] = sections["keywords"].strip()
+    sections["hashtags"] = sections["hashtags"].strip()
     return sections
 
 # --- Создание CSV ---
 def create_csv_file(product_name: str, package_text: str, user_id: int) -> str:
     parts = parse_package(package_text)
     csv_path = f"temp_{user_id}.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         writer.writerow(["Товар", "Заголовок", "Описание", "Ключевые слова", "Хэштеги"])
         writer.writerow([product_name, parts["heading"], parts["description"], parts["keywords"], parts["hashtags"]])
     return csv_path
 
-# --- Добавление в историю ---
+# --- История генераций ---
 def add_to_history(user_id: int, product_name: str, package_text: str):
     entry = {
         "product": product_name,
@@ -96,7 +99,7 @@ def add_to_history(user_id: int, product_name: str, package_text: str):
     history[user_key] = history[user_key][-10:]
     save_history(history)
 
-def get_user_history(user_id: int, limit: int = 5):
+def get_user_history(user_id: int, limit: int = 5) -> list:
     user_key = str(user_id)
     entries = history.get(user_key, [])
     return entries[-limit:]
@@ -181,12 +184,12 @@ async def handle_text(message: Message):
         save_access(user_access)
 
     product_name = message.text
-    description = generate_full_package(product_name)
-    add_to_history(message.from_user.id, product_name, description)
+    package = generate_full_package(product_name)
+    add_to_history(message.from_user.id, product_name, package)
 
-    await message.answer(description)
+    await message.answer(package)
 
-    csv_path = create_csv_file(product_name, description, message.from_user.id)
+    csv_path = create_csv_file(product_name, package, message.from_user.id)
     await message.answer_document(FSInputFile(csv_path))
     os.remove(csv_path)
 
