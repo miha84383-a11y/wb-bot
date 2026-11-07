@@ -96,7 +96,6 @@ def create_xlsx_file(product_name: str, package_text: str, user_id: int) -> str:
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         cell.border = thin_border
 
-    # --- ИСПРАВЛЕННАЯ ШИРИНА КОЛОНОК ---
     ws.column_dimensions["A"].width = 20
     ws.column_dimensions["B"].width = 30
     ws.column_dimensions["C"].width = 55
@@ -142,7 +141,7 @@ def get_user_history(user_id: int, limit: int = 5) -> list:
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Купить 10 генераций за 50 Stars", callback_data="buy")]
+        [InlineKeyboardButton(text="Купить 10 генераций за 50 Stars", callback_data="buy"), InlineKeyboardButton(text="👀 Пример работы", callback_data="example")]
     ])
     user_id = str(message.from_user.id)
     balance = user_access.get(user_id, 0)
@@ -166,6 +165,25 @@ async def process_buy(callback_query: types.CallbackQuery):
         payload="10_generations_payload",
         currency="XTR",
         prices=[LabeledPrice(label="10 генераций", amount=50)]
+    )
+    await callback_query.answer()
+
+@router.callback_query(lambda c: c.data == "example")
+async def process_example(callback_query: types.CallbackQuery):
+    example_package = (
+        "--- Заголовок ---\n"
+        "Термокружка с двойной стенкой\n"
+        "--- Описание ---\n"
+        "Наша термокружка удерживает напитки горячими до 12 часов и холодными до 24 часов. "
+        "Эргономичная форма и надежная герметичность сделают ваш день комфортнее.\n"
+        "--- Ключевые слова ---\n"
+        "термокружка, подарок, доставка, isotherm\n"
+        "--- Хэштеги ---\n"
+        "#термокружка #подарочно #уют #купить"
+    )
+    await callback_query.message.answer(
+        f"{example_package}\n\n"
+        "Вот так выглядит готовый пакет. Хочешь сгенерировать для своего товара? Просто отправь название!"
     )
     await callback_query.answer()
 
