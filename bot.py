@@ -186,6 +186,14 @@ async def process_example(callback_query: types.CallbackQuery):
         f"{example_package}\n\n"
         "Вот так выглядит готовый пакет. Хочешь сгенерировать для своего товара? Просто отправь название!"
     )
+
+    # Безопасный user_id (если вдруг None, используем 0)
+    user_id = callback_query.from_user.id if callback_query.from_user.id else 0
+
+    xlsx_path = create_xlsx_file("Термокружка", example_package, user_id)
+    await callback_query.message.answer_document(FSInputFile(xlsx_path))
+    os.remove(xlsx_path)
+
     await callback_query.answer()
 
 @router.pre_checkout_query()
@@ -223,7 +231,6 @@ async def cmd_history(message: Message):
 
 @router.message()
 async def handle_text(message: Message):
-    # Пропускаем сообщения без текста (например, callback-запросы)
     if not message.text:
         return
 
