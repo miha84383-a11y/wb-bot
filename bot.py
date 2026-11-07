@@ -1,11 +1,12 @@
 import asyncio
 import json
 import os
-import csv
 from datetime import datetime
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, LabeledPrice, FSInputFile
+from openpyxl import Workbook
+from openpyxl.styles import Alignment
 
 from app import generate_full_package
 
@@ -73,15 +74,32 @@ def parse_package(package_text: str) -> dict:
         sections[key] = sections[key].strip()
     return sections
 
-# --- Создание CSV ---
-def create_csv_file(product_name: str, package_text: str, user_id: int) -> str:
+# --- Создание XLSX ---
+def create_xlsx_file(product_name: str, package_text: str, user_id: int) -> str:
     parts = parse_package(package_text)
-    csv_path = f"temp_{user_id}.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f, delimiter=';')
-        writer.writerow(["Товар", "Заголовок", "Описание", "Ключевые слова", "Хэштеги"])
-        writer.writerow([product_name, parts["heading"], parts["description"], parts["keywords"], parts["hashtags"]])
-    return csv_path
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Карточка товара"
+
+    headers = ["Товар", "Заголовок", "Описание", "Ключевые слова", "Хэштеги"]
+    ws.append(headers)
+
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["B"].width = 30
+    ws.column_dimensions["C"].width = 60
+    ws.column_dimensions["D"].width = 30
+    ws.column_dimensions["E"].width = 30
+
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True)
+
+    row_data = [product_name, parts["heading"], parts["description"], parts["keywords"], parts["hashtags"]]
+    ws.append(row_data)
+
+    xlsx_path = f"temp_{user_id}.xlsx"
+    wb.save(xlsx_path)
+    return xlsx_path
 
 # --- История ---
 def add_to_history(user_id: int, product_name: str, package_text: str):
@@ -187,9 +205,9 @@ async def handle_text(message: Message):
 
     await message.answer(package)
 
-    csv_path = create_csv_file(product_name, package, message.from_user.id)
-    await message.answer_document(FSInputFile(csv_path))
-    os.remove(csv_path)
+    xlsx_path = create_xlsx_file(product_name, package, message.from_user.id)
+    await message.answer_document(FSInputFile(xlsx_path))
+    os.remove(xlsx_path)
 
     if PAYMENTS_ENABLED:
         await message.answer(f"Хочешь сгенерировать ещё? У тебя осталось {user_access[user_id]} генераций.")
