@@ -80,6 +80,98 @@ def generate_description(product_name: str) -> str:
         return f"❌ Ошибка при запросе к Groq: {e}"
 
 
+def generate_full_package(product_name: str) -> str:
+    """Отправляет запрос к API Groq и возвращает полный пакет для карточки товара.
+
+    Формат возвращаемого текста:
+    Заголовок (до 50 символов)
+    Описание (продающее, с преимуществами)
+    Ключевые слова (5-7 штук)
+    Хэштеги (3-5 штук)
+    """
+    if not GROQ_API_KEY.strip() or GROQ_API_KEY == "gsk_votre_cle_groq_ici":
+        return (
+            "⚠️ У вас не указан API-ключ Groq. "
+            "Получите его на https://console.groq.com/keys и "
+            "вставьте в переменную GROQ_API_KEY или задайте её в окружении перед запуском скрипта."
+        )
+
+    import requests
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+    }
+
+    prompt = f"""
+    Сгенерируй полный пакет для карточки товара на маркетплейсе.
+    Товар: {product_name}.
+
+    Предоставь следующую информацию:
+    1. Заголовок (максимум 50 символов) — короткий продающий титул.
+    2. Описание (продающее текст, 3-5 предложений, с основными преимуществами).
+    3. Ключевые слова (5-7 штук, через запятую).
+    4. Хэштеги (3-5 штук, начинающихся с #).
+
+    Верни ответ в формате (каждая часть с новой строки, заголовки в квадратных скобках):
+
+    [HEADER]: <заголовок>
+    [DESCRIPTION]: <описание>
+    [KEYWORDS]: <ключевое1, ключевое2, ...>
+    [HASHTAGS]: <хэштег1, хэштег2, ...>
+    """
+
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": "Ты помощник, который генерирует рекламные тексты для товаров."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.7,
+    }
+
+    try:
+        response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        choices = data.get("choices", [])
+        if choices and "message" in choices[0]:
+            raw = choices[0]["message"]["content"].strip()
+            # Парсим ответ
+            header = ""
+            description = ""
+            keywords = ""
+            hashtags = ""
+            for line in raw.splitlines():
+                line = line.strip()
+                if line.lower().startswith("[header]") or line.lower().startswith("header:"):
+                    header = line.split(":", 1)[1].strip() if ":" in line else ""
+                elif line.lower().startswith("[description]") or line.lower().startswith("description:"):
+                    description = line.split(":", 1)[1].strip() if ":" in line else ""
+                elif line.lower().startswith("[keywords]") or line.lower().startswith("keywords:"):
+                    keywords = line.split(":", 1)[1].strip() if ":" in line else ""
+                elif line.lower().startswith("[hashtags]") or line.lower().startswith("hashtags:"):
+                    hashtags = line.split(":", 1)[1].strip() if ":" in line else ""
+            # Формируем итоговый текст с разделителями
+            # Ограничиваем заголовок до 50 символов
+            header = header[:50]
+            result = (
+                f"--- Заголовок ({len(header)} символов) ---\n"
+                f"{header}\n\n"
+                f"--- Описание (продающее) ---\n"
+                f"{description}\n\n"
+                f"--- Ключевые слова ---\n"
+                f"{keywords}\n\n"
+                f"--- Хэштеги ---\n"
+                f"{hashtags}\n"
+            )
+            return result
+        else:
+            return "❗️ Неожиданный формат ответа от Groq."
+    except Exception as e:
+        return f"❌ Ошибка при запросе к Groq: {e}"
+
+
 # -------------------- Точка входа --------------------
 def main():
     product_input = input("Введите название товара (или нажмите Enter для использования значения по умолчанию): ").strip()
