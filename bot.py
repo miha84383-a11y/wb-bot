@@ -2,11 +2,11 @@ import asyncio
 import json
 import os
 from datetime import datetime
+from openpyxl import Workbook
+from openpyxl.styles import Alignment
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, LabeledPrice, FSInputFile
-from openpyxl import Workbook
-from openpyxl.styles import Alignment
 
 from app import generate_full_package
 
@@ -93,8 +93,9 @@ def create_xlsx_file(product_name: str, package_text: str, user_id: int) -> str:
     row_data = [product_name, parts["heading"], parts["description"], parts["keywords"], parts["hashtags"]]
     ws.append(row_data)
 
+    # Применяем wrap_text и vertical='top' к ячейкам строки с данными
     for cell in ws[2]:
-        cell.alignment = Alignment(wrap_text=True)
+        cell.alignment = Alignment(wrap_text=True, vertical='top')
 
     ws.row_dimensions[2].height = None
 
