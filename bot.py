@@ -7,7 +7,7 @@ from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, LabeledPrice, FSInputFile
 
-from app import generate_full_package  # <-- ЭТОТ ИМПОРТ БЫЛ ПРОПУЩЕН
+from app import generate_full_package
 
 # --- Конфигурация ---
 ADMIN_ID = 860288063  # Ваш Telegram ID
@@ -69,10 +69,8 @@ def parse_package(package_text: str) -> dict:
             continue
         if current and stripped:
             sections[current] += stripped + " "
-    sections["heading"] = sections["heading"].strip()
-    sections["description"] = sections["description"].strip()
-    sections["keywords"] = sections["keywords"].strip()
-    sections["hashtags"] = sections["hashtags"].strip()
+    for key in sections:
+        sections[key] = sections[key].strip()
     return sections
 
 # --- Создание CSV ---
@@ -80,12 +78,12 @@ def create_csv_file(product_name: str, package_text: str, user_id: int) -> str:
     parts = parse_package(package_text)
     csv_path = f"temp_{user_id}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, delimiter=';')
         writer.writerow(["Товар", "Заголовок", "Описание", "Ключевые слова", "Хэштеги"])
         writer.writerow([product_name, parts["heading"], parts["description"], parts["keywords"], parts["hashtags"]])
     return csv_path
 
-# --- История генераций ---
+# --- История ---
 def add_to_history(user_id: int, product_name: str, package_text: str):
     entry = {
         "product": product_name,
