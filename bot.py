@@ -141,7 +141,8 @@ def get_user_history(user_id: int, limit: int = 5) -> list:
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Купить 10 генераций за 50 Stars", callback_data="buy"), InlineKeyboardButton(text="👀 Пример работы", callback_data="example")]
+        [InlineKeyboardButton(text="Купить 10 генераций за 50 Stars", callback_data="buy")],
+        [InlineKeyboardButton(text="👀 Пример работы", callback_data="example")]
     ])
     user_id = str(message.from_user.id)
     balance = user_access.get(user_id, 0)
@@ -222,6 +223,10 @@ async def cmd_history(message: Message):
 
 @router.message()
 async def handle_text(message: Message):
+    # Пропускаем сообщения без текста (например, callback-запросы)
+    if not message.text:
+        return
+
     user_id = str(message.from_user.id)
 
     if PAYMENTS_ENABLED:
