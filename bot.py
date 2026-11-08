@@ -470,9 +470,3 @@ async def add_generations(callback: types.CallbackQuery):
     await callback.answer()
 
 dp.include_router(router)
-
-async def main():
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
