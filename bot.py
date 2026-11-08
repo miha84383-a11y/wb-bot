@@ -280,8 +280,9 @@ async def handle_document(message: Message):
     try:
         if file_ext == "xlsx":
             from openpyxl import load_workbook
-            wb = load_workbook(file_path, read_only=True, data_only=True)
+            wb = load_workbook(file_path, read_only=False)
             ws = wb.active
+            await asyncio.sleep(0.1)
             for row in ws.iter_rows(min_row=2, values_only=True):
                 if row[0] is not None:
                     products.append(str(row[0]).strip())
