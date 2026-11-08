@@ -334,7 +334,7 @@ async def handle_document(message: Message):
             result = None
             for attempt in range(2):
                 try:
-                    result = generate_full_package(p)
+                    result = await generate_full_package(p)
                     break
                 except Exception as e:
                     print(f"Попытка {attempt+1} для {p} не удалась: {e}")
@@ -415,7 +415,7 @@ async def handle_text(message: Message):
         save_access(user_access)
 
     product_name = message.text
-    package = generate_full_package(product_name)
+    package = await generate_full_package(product_name)
     add_to_history(message.from_user.id, product_name, package)
 
     await message.answer(package)
