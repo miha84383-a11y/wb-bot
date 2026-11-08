@@ -49,18 +49,11 @@ def save_history(history: dict):
 history = load_history()
 
 def make_progress_bar(current: int, total: int) -> str:
-    """
-    Создает текстовый прогресс-бар.
-    :param current: текущее количество обработанных товаров
-    :param total: общее количество товаров
-    :return: строка вида '[███████░░░░░░░░░░░░] 20 из 100'
-    """
     bar_length = 20
     filled_blocks = round((current / total) * bar_length) if total > 0 else 0
     empty_blocks = bar_length - filled_blocks
     bar = "█" * filled_blocks + "░" * empty_blocks
     return f"{bar} {current} из {total}"
-
 
 # --- Парсинг пакета ---
 def parse_package(package_text: str) -> dict:
@@ -203,7 +196,6 @@ async def process_example(callback_query: types.CallbackQuery):
         "Вот так выглядит готовый пакет. Хочешь сгенерировать для своего товара? Просто отправь название!"
     )
 
-    # Создаем XLSX для примера
     parsed = parse_package(example_package)
     example_result = {
         "product": "Термокружка",
@@ -332,7 +324,6 @@ async def handle_document(message: Message):
     all_results = []
     group_count = 0
 
-    # Засекаем время старта для расчета скорости
     start_time = asyncio.get_event_loop().time()
 
     for i in range(0, product_count, group_size):
@@ -340,13 +331,21 @@ async def handle_document(message: Message):
         group = products[i:i + group_size]
         group_results = []
         for p in group:
-            try:
-                result = generate_full_package(p)
+            result = None
+            for attempt in range(2):
+                try:
+                    result = generate_full_package(p)
+                    break
+                except Exception as e:
+                    print(f"Попытка {attempt+1} для {p} не удалась: {e}")
+                    await asyncio.sleep(5)
+
+            if result:
                 group_results.append(result)
-                await asyncio.sleep(1.5)  # Пауза 1.5 секунды между товарами
-            except Exception as e:
-                print(f"ОШИБКА для {p}: {e}")  # Логируем ошибку
-                group_results.append(e)
+            else:
+                group_results.append(Exception("Не удалось после 2 попыток"))
+
+            await asyncio.sleep(3)
 
         group_end = asyncio.get_event_loop().time()
         group_duration = group_end - group_start
@@ -368,12 +367,10 @@ async def handle_document(message: Message):
         processed = min(i + group_size, product_count)
         remaining = product_count - processed
 
-        # Рассчитываем среднее время на группу
         avg_group_time = (group_end - start_time) / max(group_count, 1)
         estimated_remaining_groups = remaining / group_size
         remaining_time = estimated_remaining_groups * avg_group_time
 
-        # Формируем строку времени
         time_str = ""
         if remaining_time > 60:
             minutes = int(remaining_time // 60)
@@ -382,7 +379,6 @@ async def handle_document(message: Message):
         elif remaining_time > 1:
             time_str = f" (~{int(remaining_time)} сек)"
 
-        # Обновляем сообщение с прогресс-баром
         await status_msg.edit_text(
             f"⏳ Обработка файла...\n{make_progress_bar(processed, product_count)}\n"
             f"Осталось: ~{remaining} товаров{time_str}"
@@ -424,7 +420,6 @@ async def handle_text(message: Message):
 
     await message.answer(package)
 
-    # Для одиночной генерации создаем XLSX с одним результатом
     parsed = parse_package(package)
     result = {
         "product": product_name,
