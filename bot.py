@@ -343,7 +343,9 @@ async def handle_document(message: Message):
             try:
                 result = generate_full_package(p)
                 group_results.append(result)
+                await asyncio.sleep(1.5)  # Пауза 1.5 секунды между товарами
             except Exception as e:
+                print(f"ОШИБКА для {p}: {e}")  # Логируем ошибку
                 group_results.append(e)
 
         group_end = asyncio.get_event_loop().time()
