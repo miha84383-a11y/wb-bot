@@ -271,7 +271,8 @@ async def handle_document(message: Message):
         return
 
     file = await bot.get_file(document.file_id)
-    file_path = await bot.download_file(file.file_path)
+    file_path = f"temp_{user_id}_{document.file_name}"
+    await bot.download_file(file.file_path, file_path)
 
     file_ext = document.file_name.split(".")[-1].lower() if document.file_name else ""
 
