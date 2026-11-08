@@ -1,4 +1,5 @@
 import asyncio
+import csv
 import json
 import os
 from datetime import datetime
@@ -11,7 +12,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, P
 from app import generate_full_package
 
 # --- Конфигурация ---
-ADMIN_ID = 860288063  # Ваш Telegram ID
+ADMIN_ID = 860288063
 PAYMENTS_ENABLED = True
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -75,11 +76,10 @@ def parse_package(package_text: str) -> dict:
     return sections
 
 # --- Создание XLSX (с оформлением) ---
-def create_xlsx_file(product_name: str, package_text: str, user_id: int) -> str:
-    parts = parse_package(package_text)
+def create_xlsx_file(results: list, user_id: int) -> str:
     wb = Workbook()
     ws = wb.active
-    ws.title = "Карточка товара"
+    ws.title = "Карточки товаров"
 
     headers = ["Товар", "Заголовок", "Описание", "Ключевые слова", "Хэштеги"]
     ws.append(headers)
@@ -96,24 +96,25 @@ def create_xlsx_file(product_name: str, package_text: str, user_id: int) -> str:
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         cell.border = thin_border
 
-    ws.column_dimensions["A"].width = 20
-    ws.column_dimensions["B"].width = 30
-    ws.column_dimensions["C"].width = 55
-    ws.column_dimensions["D"].width = 30
-    ws.column_dimensions["E"].width = 25
+    ws.column_dimensions["A"].width = 25
+    ws.column_dimensions["B"].width = 35
+    ws.column_dimensions["C"].width = 40
+    ws.column_dimensions["D"].width = 25
+    ws.column_dimensions["E"].width = 20
 
-    row_data = [product_name, parts["heading"], parts["description"], parts["keywords"], parts["hashtags"]]
-    ws.append(row_data)
+    for i, result in enumerate(results, 2):
+        ws.cell(row=i, column=1, value=result.get("product", ""))
+        ws.cell(row=i, column=2, value=result.get("heading", ""))
+        ws.cell(row=i, column=3, value=result.get("description", ""))
+        ws.cell(row=i, column=4, value=result.get("keywords", ""))
+        ws.cell(row=i, column=5, value=result.get("hashtags", ""))
+        for cell in ws[i]:
+            cell.font = data_font
+            cell.fill = data_fill
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical='top', wrap_text=True)
 
-    for cell in ws[2]:
-        cell.font = data_font
-        cell.fill = data_fill
-        cell.alignment = Alignment(wrap_text=True, vertical='top')
-        cell.border = thin_border
-
-    ws.row_dimensions[2].height = None
-
-    xlsx_path = f"temp_{user_id}.xlsx"
+    xlsx_path = f"products_{user_id}.xlsx"
     wb.save(xlsx_path)
     return xlsx_path
 
@@ -142,7 +143,8 @@ def get_user_history(user_id: int, limit: int = 5) -> list:
 async def cmd_start(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Купить 10 генераций за 50 Stars", callback_data="buy")],
-        [InlineKeyboardButton(text="👀 Пример работы", callback_data="example")]
+        [InlineKeyboardButton(text="👀 Пример работы", callback_data="example")],
+        [InlineKeyboardButton(text="📁 Загрузить файл", callback_data="upload_file")]
     ])
     user_id = str(message.from_user.id)
     balance = user_access.get(user_id, 0)
@@ -187,13 +189,27 @@ async def process_example(callback_query: types.CallbackQuery):
         "Вот так выглядит готовый пакет. Хочешь сгенерировать для своего товара? Просто отправь название!"
     )
 
-    # Безопасный user_id (если вдруг None, используем 0)
-    user_id = callback_query.from_user.id if callback_query.from_user.id else 0
-
-    xlsx_path = create_xlsx_file("Термокружка", example_package, user_id)
+    # Создаем XLSX для примера
+    parsed = parse_package(example_package)
+    example_result = {
+        "product": "Термокружка",
+        "heading": parsed.get("heading", ""),
+        "description": parsed.get("description", ""),
+        "keywords": parsed.get("keywords", ""),
+        "hashtags": parsed.get("hashtags", "")
+    }
+    xlsx_path = create_xlsx_file([example_result], callback_query.from_user.id)
     await callback_query.message.answer_document(FSInputFile(xlsx_path))
     os.remove(xlsx_path)
 
+    await callback_query.answer()
+
+@router.callback_query(lambda c: c.data == "upload_file")
+async def process_upload_file(callback_query: types.CallbackQuery):
+    await callback_query.message.answer(
+        "Отправьте мне файл в формате .xlsx или .csv, где в первом столбце перечислены названия товаров. "
+        "Я обработаю их и пришлю готовый файл с описаниями. Каждый товар стоит 1 генерацию."
+    )
     await callback_query.answer()
 
 @router.pre_checkout_query()
@@ -229,6 +245,111 @@ async def cmd_history(message: Message):
         text += f"• {entry['product']} — {entry['date']}\n"
     await message.answer(text)
 
+# --- Обработчик документов (загрузка файла) ---
+@router.message(lambda message: message.document is not None)
+async def handle_document(message: Message):
+    user_id = str(message.from_user.id)
+    document = message.document
+
+    max_file_size = 50 * 1024 * 1024
+    if document.file_size > max_file_size:
+        await message.answer("Файл слишком большой. Максимальный размер: 50 Мб.")
+        return
+
+    file = await bot.get_file(document.file_id)
+    file_path = await bot.download_file(file.file_path)
+
+    file_ext = document.file_name.split(".")[-1].lower() if document.file_name else ""
+
+    products = []
+    try:
+        if file_ext == "xlsx":
+            from openpyxl import load_workbook
+            wb = load_workbook(file_path, read_only=True, data_only=True)
+            ws = wb.active
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                if row[0] is not None:
+                    products.append(str(row[0]).strip())
+            wb.close()
+        elif file_ext == "csv":
+            with open(file_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                for row in reader:
+                    if row and row[0] is not None:
+                        products.append(str(row[0]).strip())
+        else:
+            await message.answer("Неподдерживаемый формат файла. Используйте .xlsx или .csv.")
+            os.remove(file_path)
+            return
+    except Exception as e:
+        await message.answer(f"Ошибка при чтении файла: {str(e)}")
+        os.remove(file_path)
+        return
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    product_count = len(products)
+    if product_count == 0:
+        await message.answer("В файле не найдено товаров.")
+        return
+
+    current_access = user_access.get(user_id, 0)
+    if current_access < product_count:
+        needed = product_count - current_access
+        await message.answer(
+            f"У вас {current_access} генераций, а в файле {product_count} товаров. "
+            f"Купите еще {needed}, чтобы обработать весь файл",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Купить 10 генераций за 50 Stars", callback_data="buy")]
+            ])
+        )
+        return
+
+    user_access[user_id] = current_access - product_count
+    save_access(user_access)
+
+    status_msg = await message.answer(f"Обработано 0 из {product_count} товаров...")
+
+    group_size = 20
+    all_results = []
+
+    for i in range(0, product_count, group_size):
+        group = products[i:i + group_size]
+        tasks = [generate_full_package(p) for p in group]
+        group_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for j, result in enumerate(group_results):
+            if isinstance(result, Exception):
+                all_results.append({"product": group[j], "heading": "Ошибка генерации", "description": "", "keywords": "", "hashtags": ""})
+            elif isinstance(result, str):
+                parsed = parse_package(result)
+                all_results.append({
+                    "product": group[j],
+                    "heading": parsed.get("heading", ""),
+                    "description": parsed.get("description", ""),
+                    "keywords": parsed.get("keywords", ""),
+                    "hashtags": parsed.get("hashtags", "")
+                })
+
+        processed = min(i + group_size, product_count)
+        if processed % 20 == 0 or processed == product_count:
+            await status_msg.edit_text(f"Обработано {processed} из {product_count} товаров...")
+
+        if i + group_size < product_count:
+            await asyncio.sleep(2)
+
+    xlsx_path = create_xlsx_file(all_results, int(user_id))
+    await message.answer_document(FSInputFile(xlsx_path))
+    os.remove(xlsx_path)
+
+    await message.answer(f"Генерация завершена! Обработано {len(all_results)} товаров.")
+
+    for result in all_results:
+        if result.get("heading") and result.get("heading") != "Ошибка генерации":
+            add_to_history(int(user_id), result["product"], f"Head: {result['heading']}")
+
 @router.message()
 async def handle_text(message: Message):
     if not message.text:
@@ -252,7 +373,16 @@ async def handle_text(message: Message):
 
     await message.answer(package)
 
-    xlsx_path = create_xlsx_file(product_name, package, message.from_user.id)
+    # Для одиночной генерации создаем XLSX с одним результатом
+    parsed = parse_package(package)
+    result = {
+        "product": product_name,
+        "heading": parsed.get("heading", ""),
+        "description": parsed.get("description", ""),
+        "keywords": parsed.get("keywords", ""),
+        "hashtags": parsed.get("hashtags", "")
+    }
+    xlsx_path = create_xlsx_file([result], message.from_user.id)
     await message.answer_document(FSInputFile(xlsx_path))
     os.remove(xlsx_path)
 
