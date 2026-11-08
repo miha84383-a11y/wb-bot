@@ -5,21 +5,23 @@ from aiogram import Bot, Dispatcher
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from bot import dp, bot
 
-# URL вашего сервиса на Render
 BASE_WEBHOOK_URL = "https://wb-bot-g44p.onrender.com"
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_SECRET = "my-secret-token"
 
-async def on_startup(app: web.Application):
-    # Получаем объект Bot из приложения
-    bot_instance = app["bot"]
-    await bot_instance.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
+async def on_startup(bot: Bot):
+    await bot.set_webhook(
+        f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}",
+        secret_token=WEBHOOK_SECRET,
+        drop_pending_updates=True  # полезно при переключении с polling
+    )
+    print("Webhook set successfully")
 
 async def main():
     app = web.Application()
 
-    # Сохраняем bot в приложении, чтобы on_startup мог его получить
-    app["bot"] = bot
+    # Регистрируем on_startup через dispatcher
+    dp.startup.register(on_startup)
 
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
@@ -32,8 +34,8 @@ async def main():
         return web.Response(text="OK")
     app.router.add_get("/", healthcheck)
 
+    # setup_application сам подключает startup/shutdown диспетчера
     setup_application(app, dp, bot=bot)
-    app.on_startup.append(on_startup)
 
     port = int(os.environ.get("PORT", 10000))
     runner = web.AppRunner(app)
