@@ -1,34 +1,12 @@
 #!/usr/bin/env python3
-"""
-Скрипт для генерации продающего описания товара на Wildberries с использованием API Groq.
-
-Получите ключ на https://console.groq.com/keys и вставьте его в переменную GROQ_API_KEY
-или задайте её в окружении перед запуском скрипта.
-
-Требуемые зависимости:
-    pip install requests
-"""
-
 import os
 import sys
 
-# -------------------- Конфигурация --------------------
-# 👇 Вставьте сюда ключ, который получили с console.groq.com
-# Или задайте переменную окружения: GROQ_API_KEY=ваш_ключ
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-
-# Эндпоинт Groq (API полностью совместим с форматом OpenAI)
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-
-# Бесплатная и мощная модель
 GROQ_MODEL = "openai/gpt-oss-20b"
 
-
-# -------------------- Формирование промпта --------------------
 def build_prompt(product_name: str) -> str:
-    """
-    Возвращает промпт для генерации описания товара.
-    """
     return f"""
     Напиши продающее описание для товара на маркетплейсе.
     Товар: {product_name}.
@@ -37,19 +15,9 @@ def build_prompt(product_name: str) -> str:
     Пиши на русском языке.
     """
 
-
-# -------------------- Вызов API Groq --------------------
 def generate_description(product_name: str) -> str:
-    """
-    Отправляет запрос к API Groq и возвращает сгенерированное описание.
-    """
-    # Простая проверка ключа — если вы оставили placeholder, выдадим подсказку
-    if not GROQ_API_KEY.strip() or GROQ_API_KEY == "gsk_votre_cle_groq_ici":
-        return (
-            "⚠️ У вас не указан API-ключ Groq. "
-            "Получите его на https://console.groq.com/keys и "
-            "вставьте в переменную GROQ_API_KEY или задайте её в окружении перед запуском скрипта."
-        )
+    if not GROQ_API_KEY.strip():
+        return "⚠️ У вас не указан API-ключ Groq."
 
     import requests
 
@@ -77,24 +45,12 @@ def generate_description(product_name: str) -> str:
         else:
             return "❗️ Неожиданный формат ответа от Groq."
     except Exception as e:
-        return f"❌ Ошибка при запросе к Groq: {e}"
-
+        print(f"ОШИБКА generate_description для {product_name}: {type(e).__name__} - {e}")
+        return f"❌ Ошибка: {e}"
 
 def generate_full_package(product_name: str) -> str:
-    """Отправляет запрос к API Groq и возвращает полный пакет для карточки товара.
-
-    Формат возвращаемого текста:
-    Заголовок (до 50 символов)
-    Описание (продающее, с преимуществами)
-    Ключевые слова (5-7 штук)
-    Хэштеги (3-5 штук)
-    """
-    if not GROQ_API_KEY.strip() or GROQ_API_KEY == "gsk_votre_cle_groq_ici":
-        return (
-            "⚠️ У вас не указан API-ключ Groq. "
-            "Получите его на https://console.groq.com/keys и "
-            "вставьте в переменную GROQ_API_KEY или задайте её в окружении перед запуском скрипта."
-        )
+    if not GROQ_API_KEY.strip():
+        return "⚠️ У вас не указан API-ключ Groq."
 
     import requests
 
@@ -137,23 +93,28 @@ def generate_full_package(product_name: str) -> str:
         choices = data.get("choices", [])
         if choices and "message" in choices[0]:
             raw = choices[0]["message"]["content"].strip()
-            # Парсим ответ
             header = ""
             description = ""
             keywords = ""
             hashtags = ""
             for line in raw.splitlines():
                 line = line.strip()
-                if line.lower().startswith("[header]") or line.lower().startswith("header:"):
-                    header = line.split(":", 1)[1].strip() if ":" in line else ""
-                elif line.lower().startswith("[description]") or line.lower().startswith("description:"):
-                    description = line.split(":", 1)[1].strip() if ":" in line else ""
-                elif line.lower().startswith("[keywords]") or line.lower().startswith("keywords:"):
-                    keywords = line.split(":", 1)[1].strip() if ":" in line else ""
-                elif line.lower().startswith("[hashtags]") or line.lower().startswith("hashtags:"):
-                    hashtags = line.split(":", 1)[1].strip() if ":" in line else ""
-            # Формируем итоговый текст с разделителями
-            # Ограничиваем заголовок до 50 символов
+                if not line:
+                    continue
+                lower = line.lower()
+                if lower.startswith("[header]") or lower.startswith("header:"):
+                    parts = line.split(":", 1)
+                    header = parts[1].strip() if len(parts) > 1 else ""
+                elif lower.startswith("[description]") or lower.startswith("description:"):
+                    parts = line.split(":", 1)
+                    description = parts[1].strip() if len(parts) > 1 else ""
+                elif lower.startswith("[keywords]") or lower.startswith("keywords:"):
+                    parts = line.split(":", 1)
+                    keywords = parts[1].strip() if len(parts) > 1 else ""
+                elif lower.startswith("[hashtags]") or lower.startswith("hashtags:"):
+                    parts = line.split(":", 1)
+                    hashtags = parts[1].strip() if len(parts) > 1 else ""
+
             header = header[:50]
             result = (
                 f"--- Заголовок ({len(header)} символов) ---\n"
@@ -169,20 +130,17 @@ def generate_full_package(product_name: str) -> str:
         else:
             return "❗️ Неожиданный формат ответа от Groq."
     except Exception as e:
-        return f"❌ Ошибка при запросе к Groq: {e}"
+        print(f"ОШИБКА Groq для {product_name}: {type(e).__name__} - {e}")
+        return f"❌ Ошибка: {e}"
 
-
-# -------------------- Точка входа --------------------
 def main():
     product_input = input("Введите название товара (или нажмите Enter для использования значения по умолчанию): ").strip()
     if not product_input:
         product_input = "Кружка керамическая с принтом Кот-программист"
-    product = product_input
-    print(f"🔍 Генерация описания для товара: {product}\n")
-    description = generate_description(product)
+    print(f"🔍 Генерация описания для товара: {product_input}\n")
+    description = generate_description(product_input)
     print("=== Генерированное описание ===")
     print(description)
-
 
 if __name__ == "__main__":
     main()
