@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os
 import sys
+import asyncio
+import aiohttp
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -15,11 +17,9 @@ def build_prompt(product_name: str) -> str:
     Пиши на русском языке.
     """
 
-def generate_description(product_name: str) -> str:
+async def generate_description(product_name: str) -> str:
     if not GROQ_API_KEY.strip():
         return "⚠️ У вас не указан API-ключ Groq."
-
-    import requests
 
     headers = {
         "Content-Type": "application/json",
@@ -36,9 +36,10 @@ def generate_description(product_name: str) -> str:
     }
 
     try:
-        response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=15)
-        response.raise_for_status()
-        data = response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=15) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
         choices = data.get("choices", [])
         if choices and "message" in choices[0]:
             return choices[0]["message"]["content"].strip()
@@ -48,11 +49,9 @@ def generate_description(product_name: str) -> str:
         print(f"ОШИБКА generate_description для {product_name}: {type(e).__name__} - {e}")
         return f"❌ Ошибка: {e}"
 
-def generate_full_package(product_name: str) -> str:
+async def generate_full_package(product_name: str) -> str:
     if not GROQ_API_KEY.strip():
         return "⚠️ У вас не указан API-ключ Groq."
-
-    import requests
 
     headers = {
         "Content-Type": "application/json",
@@ -87,12 +86,12 @@ def generate_full_package(product_name: str) -> str:
     }
 
     try:
-        response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        choices = data.get("choices", [])
+        async with aiohttp.ClientSession() as session:
+            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=15) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
 
-        # Проверка на пустой ответ
+        choices = data.get("choices", [])
         if not choices or "message" not in choices[0]:
             print(f"ПУСТОЙ ОТВЕТ Groq для {product_name}: {data}")
             return "❗️ Пустой ответ от Groq."
@@ -122,7 +121,6 @@ def generate_full_package(product_name: str) -> str:
                 parts = line.split(":", 1)
                 hashtags = parts[1].strip() if len(parts) > 1 else ""
 
-        # Логирование ошибки парсинга (если header и description пустые)
         if not header and not description:
             print(f"ОШИБКА ПАРСИНГА для {product_name}: raw={raw[:200]}")
             return "❗️ Ошибка парсинга ответа Groq."
@@ -143,14 +141,14 @@ def generate_full_package(product_name: str) -> str:
         print(f"ОШИБКА Groq для {product_name}: {type(e).__name__} - {e}")
         return f"❌ Ошибка: {e}"
 
-def main():
+async def main():
     product_input = input("Введите название товара (или нажмите Enter для использования значения по умолчанию): ").strip()
     if not product_input:
         product_input = "Кружка керамическая с принтом Кот-программист"
     print(f"🔍 Генерация описания для товара: {product_input}\n")
-    description = generate_description(product_input)
+    description = await generate_description(product_input)
     print("=== Генерированное описание ===")
     print(description)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
