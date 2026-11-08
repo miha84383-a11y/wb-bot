@@ -10,11 +10,16 @@ BASE_WEBHOOK_URL = "https://wb-bot-g44p.onrender.com"
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_SECRET = "my-secret-token"
 
-async def on_startup(bot: Bot) -> None:
-    await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
+async def on_startup(app: web.Application):
+    # Получаем объект Bot из приложения
+    bot_instance = app["bot"]
+    await bot_instance.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
 
 async def main():
     app = web.Application()
+
+    # Сохраняем bot в приложении, чтобы on_startup мог его получить
+    app["bot"] = bot
 
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
