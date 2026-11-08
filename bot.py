@@ -330,22 +330,28 @@ async def handle_document(message: Message):
         group_start = asyncio.get_event_loop().time()
         group = products[i:i + group_size]
         group_results = []
+        
         for p in group:
             result = None
-            for attempt in range(2):
+            # Делаем до 3 попыток
+            for attempt in range(3):
                 try:
                     result = await generate_full_package(p)
-                    break
+                    # Если Groq вернул ошибку (строка начинается с ❌ или ⚠️ или ❗️)
+                    if result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️"):
+                        raise Exception(f"Groq error: {result}")
+                    break  # Если ошибки нет, выходим из цикла попыток
                 except Exception as e:
                     print(f"Попытка {attempt+1} для {p} не удалась: {e}")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(6) # Ждем перед следующей попыткой
 
-            if result:
+            if result and not (result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️")):
                 group_results.append(result)
             else:
-                group_results.append(Exception("Не удалось после 2 попыток"))
+                group_results.append(Exception("Не удалось после 3 попыток"))
 
-            await asyncio.sleep(3)
+            # Пауза 4.5 секунды, чтобы не превысить лимиты Groq
+            await asyncio.sleep(4.5) 
 
         group_end = asyncio.get_event_loop().time()
         group_duration = group_end - group_start
