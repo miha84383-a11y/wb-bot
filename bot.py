@@ -333,30 +333,34 @@ async def handle_document(message: Message):
         
         for p in group:
             result = None
+            success = False
+            
             # Делаем до 3 попыток
             for attempt in range(3):
                 try:
-                    # Оборачиваем вызов в wait_for, чтобы принудительно прервать зависание через 60 секунд
+                    # Ждем ответ максимум 60 секунд
                     result = await asyncio.wait_for(generate_full_package(p), timeout=60.0)
                     
-                    # Если Groq вернул ошибку (строка начинается с ❌ или ⚠️ или ❗️)
+                    # Если Groq вернул ошибку
                     if result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️"):
                         raise Exception(f"Groq error: {result}")
-                    break  # Если ошибки нет, выходим из цикла попыток
+                    
+                    success = True
+                    break
                 except asyncio.TimeoutError:
                     print(f"ТАЙМАУТ 60 сек для {p}. Попытка {attempt+1}")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(3)
                 except Exception as e:
                     print(f"Попытка {attempt+1} для {p} не удалась: {e}")
-                    await asyncio.sleep(6)
+                    await asyncio.sleep(3)
 
-            if result and not (result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️")):
+            if success and result:
                 group_results.append(result)
             else:
                 group_results.append(Exception("Не удалось после 3 попыток"))
 
-            # Пауза 4.5 секунды, чтобы не превысить лимиты Groq
-            await asyncio.sleep(4.5) 
+            # Пауза 1.5 секунды (вместо 4.5), чтобы не ждать вечность
+            await asyncio.sleep(1.5) 
 
         group_end = asyncio.get_event_loop().time()
         group_duration = group_end - group_start
