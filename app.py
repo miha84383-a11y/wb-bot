@@ -91,44 +91,54 @@ def generate_full_package(product_name: str) -> str:
         response.raise_for_status()
         data = response.json()
         choices = data.get("choices", [])
-        if choices and "message" in choices[0]:
-            raw = choices[0]["message"]["content"].strip()
-            header = ""
-            description = ""
-            keywords = ""
-            hashtags = ""
-            for line in raw.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                lower = line.lower()
-                if lower.startswith("[header]") or lower.startswith("header:"):
-                    parts = line.split(":", 1)
-                    header = parts[1].strip() if len(parts) > 1 else ""
-                elif lower.startswith("[description]") or lower.startswith("description:"):
-                    parts = line.split(":", 1)
-                    description = parts[1].strip() if len(parts) > 1 else ""
-                elif lower.startswith("[keywords]") or lower.startswith("keywords:"):
-                    parts = line.split(":", 1)
-                    keywords = parts[1].strip() if len(parts) > 1 else ""
-                elif lower.startswith("[hashtags]") or lower.startswith("hashtags:"):
-                    parts = line.split(":", 1)
-                    hashtags = parts[1].strip() if len(parts) > 1 else ""
 
-            header = header[:50]
-            result = (
-                f"--- Заголовок ({len(header)} символов) ---\n"
-                f"{header}\n\n"
-                f"--- Описание (продающее) ---\n"
-                f"{description}\n\n"
-                f"--- Ключевые слова ---\n"
-                f"{keywords}\n\n"
-                f"--- Хэштеги ---\n"
-                f"{hashtags}\n"
-            )
-            return result
-        else:
-            return "❗️ Неожиданный формат ответа от Groq."
+        # Проверка на пустой ответ
+        if not choices or "message" not in choices[0]:
+            print(f"ПУСТОЙ ОТВЕТ Groq для {product_name}: {data}")
+            return "❗️ Пустой ответ от Groq."
+
+        raw = choices[0]["message"]["content"].strip()
+        print(f"ОТВЕТ Groq для {product_name}: {len(raw)} символов, начало: {raw[:100]}")
+
+        header = ""
+        description = ""
+        keywords = ""
+        hashtags = ""
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            lower = line.lower()
+            if lower.startswith("[header]") or lower.startswith("header:"):
+                parts = line.split(":", 1)
+                header = parts[1].strip() if len(parts) > 1 else ""
+            elif lower.startswith("[description]") or lower.startswith("description:"):
+                parts = line.split(":", 1)
+                description = parts[1].strip() if len(parts) > 1 else ""
+            elif lower.startswith("[keywords]") or lower.startswith("keywords:"):
+                parts = line.split(":", 1)
+                keywords = parts[1].strip() if len(parts) > 1 else ""
+            elif lower.startswith("[hashtags]") or lower.startswith("hashtags:"):
+                parts = line.split(":", 1)
+                hashtags = parts[1].strip() if len(parts) > 1 else ""
+
+        # Логирование ошибки парсинга (если header и description пустые)
+        if not header and not description:
+            print(f"ОШИБКА ПАРСИНГА для {product_name}: raw={raw[:200]}")
+            return "❗️ Ошибка парсинга ответа Groq."
+
+        header = header[:50]
+        result = (
+            f"--- Заголовок ({len(header)} символов) ---\n"
+            f"{header}\n\n"
+            f"--- Описание (продающее) ---\n"
+            f"{description}\n\n"
+            f"--- Ключевые слова ---\n"
+            f"{keywords}\n\n"
+            f"--- Хэштеги ---\n"
+            f"{hashtags}\n"
+        )
+        return result
     except Exception as e:
         print(f"ОШИБКА Groq для {product_name}: {type(e).__name__} - {e}")
         return f"❌ Ошибка: {e}"
