@@ -48,6 +48,20 @@ def save_history(history: dict):
 
 history = load_history()
 
+def make_progress_bar(current: int, total: int) -> str:
+    """
+    Создает текстовый прогресс-бар.
+    :param current: текущее количество обработанных товаров
+    :param total: общее количество товаров
+    :return: строка вида '[███████░░░░░░░░░░░░] 20 из 100'
+    """
+    bar_length = 20
+    filled_blocks = round((current / total) * bar_length) if total > 0 else 0
+    empty_blocks = bar_length - filled_blocks
+    bar = "█" * filled_blocks + "░" * empty_blocks
+    return f"{bar} {current} из {total}"
+
+
 # --- Парсинг пакета ---
 def parse_package(package_text: str) -> dict:
     sections = {"heading": "", "description": "", "keywords": "", "hashtags": ""}
@@ -310,15 +324,24 @@ async def handle_document(message: Message):
     user_access[user_id] = current_access - product_count
     save_access(user_access)
 
-    status_msg = await message.answer(f"Обработано 0 из {product_count} товаров...")
+    status_msg = await message.answer(f"⏳ Обработка файла...\n{make_progress_bar(0, product_count)}\nОсталось: ~{product_count} товаров")
 
     group_size = 20
     all_results = []
+    group_count = 0
+
+    # Засекаем время старта для расчета скорости
+    start_time = asyncio.get_event_loop().time()
 
     for i in range(0, product_count, group_size):
+        group_start = asyncio.get_event_loop().time()
         group = products[i:i + group_size]
         tasks = [generate_full_package(p) for p in group]
         group_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        group_end = asyncio.get_event_loop().time()
+        group_duration = group_end - group_start
+        group_count += 1
 
         for j, result in enumerate(group_results):
             if isinstance(result, Exception):
@@ -334,8 +357,27 @@ async def handle_document(message: Message):
                 })
 
         processed = min(i + group_size, product_count)
-        if processed % 20 == 0 or processed == product_count:
-            await status_msg.edit_text(f"Обработано {processed} из {product_count} товаров...")
+        remaining = product_count - processed
+
+        # Рассчитываем среднее время на группу
+        avg_group_time = (group_end - start_time) / max(group_count, 1)
+        estimated_remaining_groups = remaining / group_size
+        remaining_time = estimated_remaining_groups * avg_group_time
+
+        # Формируем строку времени
+        time_str = ""
+        if remaining_time > 60:
+            minutes = int(remaining_time // 60)
+            seconds = int(remaining_time % 60)
+            time_str = f" (~{minutes} мин {seconds} сек)"
+        elif remaining_time > 1:
+            time_str = f" (~{int(remaining_time)} сек)"
+
+        # Обновляем сообщение с прогресс-баром
+        await status_msg.edit_text(
+            f"⏳ Обработка файла...\n{make_progress_bar(processed, product_count)}\n"
+            f"Осталось: ~{remaining} товаров{time_str}"
+        )
 
         if i + group_size < product_count:
             await asyncio.sleep(2)
