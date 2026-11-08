@@ -36,8 +36,9 @@ async def generate_description(product_name: str) -> str:
     }
 
     try:
+        # Увеличили таймаут до 45 секунд
         async with aiohttp.ClientSession() as session:
-            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=15) as resp:
+            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=45) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
         choices = data.get("choices", [])
@@ -86,8 +87,9 @@ async def generate_full_package(product_name: str) -> str:
     }
 
     try:
+        # Увеличили таймаут до 45 секунд
         async with aiohttp.ClientSession() as session:
-            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=15) as resp:
+            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=45) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
 
@@ -140,15 +142,3 @@ async def generate_full_package(product_name: str) -> str:
     except Exception as e:
         print(f"ОШИБКА Groq для {product_name}: {type(e).__name__} - {e}")
         return f"❌ Ошибка: {e}"
-
-async def main():
-    product_input = input("Введите название товара (или нажмите Enter для использования значения по умолчанию): ").strip()
-    if not product_input:
-        product_input = "Кружка керамическая с принтом Кот-программист"
-    print(f"🔍 Генерация описания для товара: {product_input}\n")
-    description = await generate_description(product_input)
-    print("=== Генерированное описание ===")
-    print(description)
-
-if __name__ == "__main__":
-    asyncio.run(main())
