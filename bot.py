@@ -338,8 +338,13 @@ async def handle_document(message: Message):
     for i in range(0, product_count, group_size):
         group_start = asyncio.get_event_loop().time()
         group = products[i:i + group_size]
-        tasks = [generate_full_package(p) for p in group]
-        group_results = await asyncio.gather(*tasks, return_exceptions=True)
+        group_results = []
+        for p in group:
+            try:
+                result = generate_full_package(p)
+                group_results.append(result)
+            except Exception as e:
+                group_results.append(e)
 
         group_end = asyncio.get_event_loop().time()
         group_duration = group_end - group_start
