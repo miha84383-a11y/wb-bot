@@ -7,11 +7,11 @@ import re
 # Берем ключ OmniRoute из переменной окружения
 OMNIROUTE_API_KEY = os.getenv("OMNIROUTE_API_KEY", "")
 
-# ИСПРАВЛЕНО: добавлено /api/ в адрес
+# Адрес вашего OmniRoute с /api/
 OMNIROUTE_URL = "https://wb-bot-g44p.onrender.com/api/v1/chat/completions"
 
-# Модель. OmniRoute сам перенаправит куда надо.
-MODEL = "openai/gpt-oss-20b"
+# ИСПРАВЛЕНО: Явно указываем провайдера groq, чтобы OmniRoute не путался
+MODEL = "groq/openai/gpt-oss-20b"
 
 def build_prompt(product_name: str) -> str:
     return f"""
@@ -42,7 +42,6 @@ async def generate_description(product_name: str) -> str:
 
     try:
         async with aiohttp.ClientSession() as session:
-            # Увеличен таймаут до 90 секунд
             async with session.post(OMNIROUTE_URL, headers=headers, json=payload, timeout=90) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
@@ -93,7 +92,6 @@ async def generate_full_package(product_name: str) -> str:
 
     try:
         async with aiohttp.ClientSession() as session:
-            # Увеличен таймаут до 90 секунд
             async with session.post(OMNIROUTE_URL, headers=headers, json=payload, timeout=90) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
