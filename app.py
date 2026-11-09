@@ -52,9 +52,11 @@ async def generate_full_package(product_name: str) -> str:
 
         choices = data.get("choices", [])
         if not choices or "message" not in choices[0]:
+            print(f"ПУСТОЙ ОТВЕТ Groq для {product_name}: {data}")
             return "❗️ Пустой ответ от Groq."
 
         raw = choices[0]["message"]["content"].strip()
+        print(f"ОТВЕТ Groq для {product_name}: {len(raw)} символов, начало: {raw[:100]}")
         
         header = ""
         description = ""
@@ -74,6 +76,7 @@ async def generate_full_package(product_name: str) -> str:
         if hashtags_match: hashtags = hashtags_match.group(1).strip()
 
         if not header and not description:
+            print(f"ОШИБКА ПАРСИНГА для {product_name}: raw={raw[:200]}")
             return "❗️ Ошибка парсинга ответа."
 
         header = header[:50]
@@ -89,4 +92,5 @@ async def generate_full_package(product_name: str) -> str:
         )
         return result
     except Exception as e:
+        print(f"ОШИБКА Groq для {product_name}: {type(e).__name__} - {e}")
         return f"❌ Ошибка: {e}"
