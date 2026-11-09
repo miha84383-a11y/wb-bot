@@ -338,8 +338,8 @@ async def handle_document(message: Message):
             # Делаем до 3 попыток
             for attempt in range(3):
                 try:
-                    # Ждем ответ максимум 90 секунд (под OmniRoute)
-                    result = await asyncio.wait_for(generate_full_package(p), timeout=90.0)
+                    # Ждем ответ максимум 30 секунд (для прямого Groq)
+                    result = await asyncio.wait_for(generate_full_package(p), timeout=30.0)
                     
                     # Если Groq вернул ошибку
                     if result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️"):
@@ -348,18 +348,18 @@ async def handle_document(message: Message):
                     success = True
                     break
                 except asyncio.TimeoutError:
-                    print(f"ТАЙМАУТ 90 сек для {p}. Попытка {attempt+1}")
-                    await asyncio.sleep(5)
+                    print(f"ТАЙМАУТ 30 сек для {p}. Попытка {attempt+1}")
+                    await asyncio.sleep(3)
                 except Exception as e:
                     print(f"Попытка {attempt+1} для {p} не удалась: {e}")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(3)
 
             if success and result:
                 group_results.append(result)
             else:
                 group_results.append(Exception("Не удалось после 3 попыток"))
 
-            # Пауза 1.5 секунды (вместо 4.5), чтобы не ждать вечность
+            # Пауза 1.5 секунды
             await asyncio.sleep(1.5)
 
         group_end = asyncio.get_event_loop().time()
