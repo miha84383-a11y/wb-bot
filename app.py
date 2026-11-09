@@ -4,17 +4,21 @@ import asyncio
 import aiohttp
 import re
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "openai/gpt-oss-20b"
+# Ключ OpenRouter из переменных окружения Render
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Бесплатная модель OpenRouter
+MODEL = "meta-llama/llama-3.2-3b-instruct:free"
 
 async def generate_full_package(product_name: str) -> str:
-    if not GROQ_API_KEY.strip():
-        return "⚠️ У вас не указан API-ключ Groq."
+    if not OPENROUTER_API_KEY.strip():
+        return "⚠️ У вас не указан API-ключ OpenRouter."
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "HTTP-Referer": "https://wb-bot-telegram.onrender.com", # Обязательно для OpenRouter
+        "X-Title": "WB Bot" # Обязательно для OpenRouter
     }
 
     prompt = f"""
@@ -46,17 +50,17 @@ async def generate_full_package(product_name: str) -> str:
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=60) as resp:
+            async with session.post(OPENROUTER_URL, headers=headers, json=payload, timeout=60) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
 
         choices = data.get("choices", [])
         if not choices or "message" not in choices[0]:
-            print(f"ПУСТОЙ ОТВЕТ Groq для {product_name}: {data}")
-            return "❗️ Пустой ответ от Groq."
+            print(f"ПУСТОЙ ОТВЕТ OpenRouter для {product_name}: {data}")
+            return "❗️ Пустой ответ от OpenRouter."
 
         raw = choices[0]["message"]["content"].strip()
-        print(f"ОТВЕТ Groq для {product_name}: {len(raw)} символов, начало: {raw[:100]}")
+        print(f"ОТВЕТ OpenRouter для {product_name}: {len(raw)} символов, начало: {raw[:100]}")
         
         header = ""
         description = ""
@@ -92,5 +96,5 @@ async def generate_full_package(product_name: str) -> str:
         )
         return result
     except Exception as e:
-        print(f"ОШИБКА Groq для {product_name}: {type(e).__name__} - {e}")
+        print(f"ОШИБКА OpenRouter для {product_name}: {type(e).__name__} - {e}")
         return f"❌ Ошибка: {e}"
