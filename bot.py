@@ -338,8 +338,8 @@ async def handle_document(message: Message):
             # Делаем до 3 попыток
             for attempt in range(3):
                 try:
-                    # Ждем ответ максимум 60 секунд
-                    result = await asyncio.wait_for(generate_full_package(p), timeout=60.0)
+                    # Ждем ответ максимум 90 секунд (под OmniRoute)
+                    result = await asyncio.wait_for(generate_full_package(p), timeout=90.0)
                     
                     # Если Groq вернул ошибку
                     if result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️"):
@@ -348,11 +348,11 @@ async def handle_document(message: Message):
                     success = True
                     break
                 except asyncio.TimeoutError:
-                    print(f"ТАЙМАУТ 60 сек для {p}. Попытка {attempt+1}")
-                    await asyncio.sleep(3)
+                    print(f"ТАЙМАУТ 90 сек для {p}. Попытка {attempt+1}")
+                    await asyncio.sleep(5)
                 except Exception as e:
                     print(f"Попытка {attempt+1} для {p} не удалась: {e}")
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(5)
 
             if success and result:
                 group_results.append(result)
@@ -360,7 +360,7 @@ async def handle_document(message: Message):
                 group_results.append(Exception("Не удалось после 3 попыток"))
 
             # Пауза 1.5 секунды (вместо 4.5), чтобы не ждать вечность
-            await asyncio.sleep(1.5) 
+            await asyncio.sleep(1.5)
 
         group_end = asyncio.get_event_loop().time()
         group_duration = group_end - group_start
@@ -406,7 +406,18 @@ async def handle_document(message: Message):
     await message.answer_document(FSInputFile(xlsx_path))
     os.remove(xlsx_path)
 
-    await message.answer(f"Генерация завершена! Обработано {len(all_results)} товаров.")
+    # --- ВОЗВРАТ СРЕДСТВ ЗА ОШИБКИ ---
+    failed_count = sum(1 for res in all_results if res.get("heading") == "Ошибка генерации")
+    if failed_count > 0:
+        user_access[user_id] = user_access.get(user_id, 0) + failed_count
+        save_access(user_access)
+        await message.answer(
+            f"Генерация завершена! Обработано {len(all_results)} товаров.\n"
+            f"⚠️ {failed_count} товаров не удалось сгенерировать из-за лимитов нейросети. "
+            f"Мы вернули вам {failed_count} генераций на баланс. Попробуйте позже!"
+        )
+    else:
+        await message.answer(f"Генерация завершена! Обработано {len(all_results)} товаров.")
 
     for result in all_results:
         if result.get("heading") and result.get("heading") != "Ошибка генерации":
