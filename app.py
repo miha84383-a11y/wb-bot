@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 import os
-import sys
 import asyncio
 import aiohttp
+import re
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "openai/gpt-oss-20b"
+# Берем ключ OmniRoute из переменной окружения, которую мы создали на Render
+OMNIROUTE_API_KEY = os.getenv("OMNIROUTE_API_KEY", "")
+
+# Адрес вашего OmniRoute. Обратите внимание на /v1 в конце.
+OMNIROUTE_URL = "https://wb-bot-g44p.onrender.com/v1/chat/completions"
+
+# Модель. Оставляем стандартную, OmniRoute сам перенаправит куда надо.
+MODEL = "openai/gpt-oss-20b"
 
 def build_prompt(product_name: str) -> str:
     return f"""
@@ -18,16 +23,16 @@ def build_prompt(product_name: str) -> str:
     """
 
 async def generate_description(product_name: str) -> str:
-    if not GROQ_API_KEY.strip():
-        return "⚠️ У вас не указан API-ключ Groq."
+    if not OMNIROUTE_API_KEY.strip():
+        return "⚠️ У вас не указан API-ключ OmniRoute."
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {OMNIROUTE_API_KEY}",
     }
 
     payload = {
-        "model": GROQ_MODEL,
+        "model": MODEL,
         "messages": [
             {"role": "system", "content": "Ты полезный ассистент, который пишет рекламные тексты."},
             {"role": "user", "content": build_prompt(product_name)},
@@ -36,27 +41,27 @@ async def generate_description(product_name: str) -> str:
     }
 
     try:
-        # Увеличили таймаут до 45 секунд
         async with aiohttp.ClientSession() as session:
-            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=45) as resp:
+            # Таймаут увеличен до 60 секунд, чтобы OmniRoute успел сделать failover
+            async with session.post(OMNIROUTE_URL, headers=headers, json=payload, timeout=60) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
         choices = data.get("choices", [])
         if choices and "message" in choices[0]:
             return choices[0]["message"]["content"].strip()
         else:
-            return "❗️ Неожиданный формат ответа от Groq."
+            return "❗️ Неожиданный формат ответа от OmniRoute."
     except Exception as e:
         print(f"ОШИБКА generate_description для {product_name}: {type(e).__name__} - {e}")
         return f"❌ Ошибка: {e}"
 
 async def generate_full_package(product_name: str) -> str:
-    if not GROQ_API_KEY.strip():
-        return "⚠️ У вас не указан API-ключ Groq."
+    if not OMNIROUTE_API_KEY.strip():
+        return "⚠️ У вас не указан API-ключ OmniRoute."
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {OMNIROUTE_API_KEY}",
     }
 
     prompt = f"""
@@ -78,7 +83,7 @@ async def generate_full_package(product_name: str) -> str:
     """
 
     payload = {
-        "model": GROQ_MODEL,
+        "model": MODEL,
         "messages": [
             {"role": "system", "content": "Ты помощник, который генерирует рекламные тексты для товаров."},
             {"role": "user", "content": prompt},
@@ -87,45 +92,45 @@ async def generate_full_package(product_name: str) -> str:
     }
 
     try:
-        # Увеличили таймаут до 45 секунд
         async with aiohttp.ClientSession() as session:
-            async with session.post(GROQ_URL, headers=headers, json=payload, timeout=45) as resp:
+            # Таймаут увеличен до 60 секунд
+            async with session.post(OMNIROUTE_URL, headers=headers, json=payload, timeout=60) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
 
         choices = data.get("choices", [])
         if not choices or "message" not in choices[0]:
-            print(f"ПУСТОЙ ОТВЕТ Groq для {product_name}: {data}")
-            return "❗️ Пустой ответ от Groq."
+            print(f"ПУСТОЙ ОТВЕТ для {product_name}: {data}")
+            return "❗️ Пустой ответ от OmniRoute."
 
         raw = choices[0]["message"]["content"].strip()
-        print(f"ОТВЕТ Groq для {product_name}: {len(raw)} символов, начало: {raw[:100]}")
+        print(f"ОТВЕТ для {product_name}: {len(raw)} символов, начало: {raw[:100]}")
 
         header = ""
         description = ""
         keywords = ""
         hashtags = ""
-        for line in raw.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            lower = line.lower()
-            if lower.startswith("[header]") or lower.startswith("header:"):
-                parts = line.split(":", 1)
-                header = parts[1].strip() if len(parts) > 1 else ""
-            elif lower.startswith("[description]") or lower.startswith("description:"):
-                parts = line.split(":", 1)
-                description = parts[1].strip() if len(parts) > 1 else ""
-            elif lower.startswith("[keywords]") or lower.startswith("keywords:"):
-                parts = line.split(":", 1)
-                keywords = parts[1].strip() if len(parts) > 1 else ""
-            elif lower.startswith("[hashtags]") or lower.startswith("hashtags:"):
-                parts = line.split(":", 1)
-                hashtags = parts[1].strip() if len(parts) > 1 else ""
+        
+        # Надежный парсинг с помощью регулярных выражений
+        header_match = re.search(r'\[HEADER\]:\s*(.*)', raw, re.IGNORECASE)
+        if header_match:
+            header = header_match.group(1).strip()
+
+        description_match = re.search(r'\[DESCRIPTION\]:\s*(.*?)(?=\[|$)', raw, re.IGNORECASE | re.DOTALL)
+        if description_match:
+            description = description_match.group(1).strip()
+
+        keywords_match = re.search(r'\[KEYWORDS\]:\s*(.*)', raw, re.IGNORECASE)
+        if keywords_match:
+            keywords = keywords_match.group(1).strip()
+
+        hashtags_match = re.search(r'\[HASHTAGS\]:\s*(.*)', raw, re.IGNORECASE)
+        if hashtags_match:
+            hashtags = hashtags_match.group(1).strip()
 
         if not header and not description:
             print(f"ОШИБКА ПАРСИНГА для {product_name}: raw={raw[:200]}")
-            return "❗️ Ошибка парсинга ответа Groq."
+            return "❗️ Ошибка парсинга ответа."
 
         header = header[:50]
         result = (
@@ -140,5 +145,5 @@ async def generate_full_package(product_name: str) -> str:
         )
         return result
     except Exception as e:
-        print(f"ОШИБКА Groq для {product_name}: {type(e).__name__} - {e}")
+        print(f"ОШИБКА для {product_name}: {type(e).__name__} - {e}")
         return f"❌ Ошибка: {e}"
