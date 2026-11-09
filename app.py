@@ -4,13 +4,13 @@ import asyncio
 import aiohttp
 import re
 
-# Берем ключ OmniRoute из переменной окружения, которую мы создали на Render
+# Берем ключ OmniRoute из переменной окружения
 OMNIROUTE_API_KEY = os.getenv("OMNIROUTE_API_KEY", "")
 
-# Адрес вашего OmniRoute. Обратите внимание на /v1 в конце.
-OMNIROUTE_URL = "https://wb-bot-g44p.onrender.com/v1/chat/completions"
+# ИСПРАВЛЕНО: добавлено /api/ в адрес
+OMNIROUTE_URL = "https://wb-bot-g44p.onrender.com/api/v1/chat/completions"
 
-# Модель. Оставляем стандартную, OmniRoute сам перенаправит куда надо.
+# Модель. OmniRoute сам перенаправит куда надо.
 MODEL = "openai/gpt-oss-20b"
 
 def build_prompt(product_name: str) -> str:
@@ -42,8 +42,8 @@ async def generate_description(product_name: str) -> str:
 
     try:
         async with aiohttp.ClientSession() as session:
-            # Таймаут увеличен до 60 секунд, чтобы OmniRoute успел сделать failover
-            async with session.post(OMNIROUTE_URL, headers=headers, json=payload, timeout=60) as resp:
+            # Увеличен таймаут до 90 секунд
+            async with session.post(OMNIROUTE_URL, headers=headers, json=payload, timeout=90) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
         choices = data.get("choices", [])
@@ -93,8 +93,8 @@ async def generate_full_package(product_name: str) -> str:
 
     try:
         async with aiohttp.ClientSession() as session:
-            # Таймаут увеличен до 60 секунд
-            async with session.post(OMNIROUTE_URL, headers=headers, json=payload, timeout=60) as resp:
+            # Увеличен таймаут до 90 секунд
+            async with session.post(OMNIROUTE_URL, headers=headers, json=payload, timeout=90) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
 
