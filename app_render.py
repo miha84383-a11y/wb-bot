@@ -5,7 +5,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from bot import dp, bot
 
-BASE_WEBHOOK_URL = "https://wb-bot-g44p.onrender.com"
+# ИСПРАВЛЕНО: адрес нового сервиса с ботом
+BASE_WEBHOOK_URL = "https://wb-bot-telegram.onrender.com"
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_SECRET = "my-secret-token"
 
