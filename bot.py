@@ -338,17 +338,17 @@ async def handle_document(message: Message):
             # Делаем до 3 попыток
             for attempt in range(3):
                 try:
-                    # Ждем ответ максимум 30 секунд (для прямого Groq)
-                    result = await asyncio.wait_for(generate_full_package(p), timeout=30.0)
+                    # Ждем ответ максимум 90 секунд (чтобы app.py успел переключиться на Z.ai)
+                    result = await asyncio.wait_for(generate_full_package(p), timeout=90.0)
                     
-                    # Если Groq вернул ошибку
+                    # Если провайдеры вернули ошибку
                     if result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️"):
-                        raise Exception(f"Groq error: {result}")
+                        raise Exception(f"Provider error: {result}")
                     
                     success = True
                     break
                 except asyncio.TimeoutError:
-                    print(f"ТАЙМАУТ 30 сек для {p}. Попытка {attempt+1}")
+                    print(f"ТАЙМАУТ 90 сек для {p}. Попытка {attempt+1}")
                     await asyncio.sleep(3)
                 except Exception as e:
                     print(f"Попытка {attempt+1} для {p} не удалась: {e}")
@@ -359,8 +359,8 @@ async def handle_document(message: Message):
             else:
                 group_results.append(Exception("Не удалось после 3 попыток"))
 
-            # Пауза 1.5 секунды
-            await asyncio.sleep(1.5)
+            # Пауза 2 секунды между товарами
+            await asyncio.sleep(2)
 
         group_end = asyncio.get_event_loop().time()
         group_duration = group_end - group_start
