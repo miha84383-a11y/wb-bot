@@ -16,7 +16,7 @@ PROVIDERS = [
         "name": "Groq",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "key": GROQ_API_KEY,
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "headers": {"Authorization": f"Bearer {GROQ_API_KEY}"}
     },
     {
@@ -160,4 +160,4 @@ async def generate_full_package(product_name: str) -> str:
                     print(f"ОШИБКА {provider['name']}: {e}. Пробуем следующего...")
                     await asyncio.sleep(2)
 
-    return f"❌ Ошибка: все провайдеры недоступны. Последняя ошибка: {last_error}"
+    return f"❌ Ошибка: все провайдеры недоступны. Последняя ошибка: {last_error}"a
