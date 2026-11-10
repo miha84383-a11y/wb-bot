@@ -160,4 +160,4 @@ async def generate_full_package(product_name: str) -> str:
                     print(f"ОШИБКА {provider['name']}: {e}. Пробуем следующего...")
                     await asyncio.sleep(2)
 
-    return f"❌ Ошибка: все провайдеры недоступны. Последняя ошибка: {last_error}"a
+    return f"❌ Ошибка: все провайдеры недоступны. Последняя ошибка: {last_error}"
