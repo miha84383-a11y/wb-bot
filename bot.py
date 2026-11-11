@@ -335,13 +335,10 @@ async def handle_document(message: Message):
             result = None
             success = False
             
-            # Делаем до 3 попыток
             for attempt in range(3):
                 try:
-                    # Ждем ответ максимум 90 секунд
                     result = await asyncio.wait_for(generate_full_package(p), timeout=90.0)
                     
-                    # Если провайдеры вернули ошибку
                     if result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️"):
                         raise Exception(f"Provider error: {result}")
                     
@@ -359,7 +356,6 @@ async def handle_document(message: Message):
             else:
                 group_results.append(Exception("Не удалось после 3 попыток"))
 
-            # Пауза 2 секунды между товарами
             await asyncio.sleep(2)
 
         group_end = asyncio.get_event_loop().time()
@@ -505,7 +501,7 @@ async def process_support(callback_query: types.CallbackQuery):
         "Пишу тексты для карточек WB и Ozon. 20 карточек — 50 Stars.\n"
         "🤖 Заказать описания прямо в Telegram-боте: @MaiVik_Text_bot\n"
         "🎁 Первое описание — бесплатно.\n"
-        "Связь: @MaikVik"
+        "💬 По всем вопросам пишите в чат обсуждения под постами: https://t.me/wb_ozon_opisaniya"
     )
     await callback_query.message.answer(text)
     await callback_query.answer()
