@@ -3,6 +3,7 @@ import os
 import asyncio
 import aiohttp
 import re
+import json
 
 # Ключи из переменных окружения Render
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -30,7 +31,7 @@ PROVIDERS = [
         "name": "Cloudflare",
         "url": f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
         "key": CLOUDFLARE_API_TOKEN,
-        "model": None, # У Cloudflare модель в URL
+        "model": None,
         "headers": {"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"}
     }
 ]
@@ -41,7 +42,6 @@ async def _make_request(provider: dict, prompt: str) -> str:
         **provider["headers"]
     }
     
-    # Формируем payload в зависимости от провайдера
     if provider["name"] == "Cloudflare":
         payload = {
             "messages": [
@@ -66,7 +66,6 @@ async def _make_request(provider: dict, prompt: str) -> str:
             resp.raise_for_status()
             data = await resp.json()
     
-    # Парсинг ответа для Cloudflare (другая структура)
     if provider["name"] == "Cloudflare":
         if "result" in data and "response" in data["result"]:
             return data["result"]["response"].strip()
@@ -79,28 +78,19 @@ async def _make_request(provider: dict, prompt: str) -> str:
     
     return choices[0]["message"]["content"].strip()
 
-async def generate_full_package(product_name: str) -> str:
-    prompt = f"""
-    Сгенерируй полный пакет для карточки товара на маркетплейсе.
-    Товар: {product_name}.
 
-    Предоставь следующую информацию:
-    1. Заголовок (максимум 50 символов) — короткий продающий титул.
-    2. Описание (продающее текст, 3-5 предложений, с основными преимуществами).
-    3. Ключевые слова (5-7 штук, через запятую).
-    4. Хэштеги (3-5 штук, начинающихся с #).
-
-    Верни ответ в формате (каждая часть с новой строки, заголовки в квадратных скобках):
-
-    [HEADER]: <заголовок>
-    [DESCRIPTION]: <описание>
-    [KEYWORDS]: <ключевое1, ключевое2, ...>
-    [HASHTAGS]: <хэштег1, хэштег2, ...>
-    """
+async def generate_full_package(product_name: str) -> dict:
+    prompt = (
+        "You are a helpful assistant. Generate strictly a JSON object with the following keys: "
+        "\"header\" (up to 50 characters), \"description\" (3-5 sentences), "
+        "\"keywords\" (comma-separated list, 5-7 keywords), \"hashtags\" (comma-separated list of hashtags starting with #). "
+        f"Product: {product_name}. "
+        "Return ONLY the JSON object, no extra text, no markdown fences."
+    )
 
     last_error = None
 
-    for attempt in range(5):  # Максимум 5 кругов по провайдерам
+    for attempt in range(5):
         for provider in PROVIDERS:
             if not provider["key"].strip():
                 continue
@@ -110,38 +100,33 @@ async def generate_full_package(product_name: str) -> str:
                 raw = await _make_request(provider, prompt)
                 print(f"УСПЕХ: {provider['name']} ответил.")
                 
-                header = ""
-                description = ""
-                keywords = ""
-                hashtags = ""
-                
-                header_match = re.search(r'\[HEADER\]:\s*(.*)', raw, re.IGNORECASE)
-                if header_match: header = header_match.group(1).strip()
+                # Пытаемся распарсить JSON
+                data = None
+                try:
+                    data = json.loads(raw)
+                except Exception:
+                    start = raw.find("{")
+                    end = raw.rfind("}")
+                    if start != -1 and end != -1 and end > start:
+                        json_candidate = raw[start:end+1]
+                        try:
+                            data = json.loads(json_candidate)
+                        except Exception:
+                            data = None
+                    if data is None:
+                        raise ValueError("No valid JSON found in response")
 
-                description_match = re.search(r'\[DESCRIPTION\]:\s*(.*?)(?=\[|$)', raw, re.IGNORECASE | re.DOTALL)
-                if description_match: description = description_match.group(1).strip()
+                header = data.get("header", "")[:50]
+                description = data.get("description", "")
+                keywords = data.get("keywords", "")
+                hashtags = data.get("hashtags", "")
 
-                keywords_match = re.search(r'\[KEYWORDS\]:\s*(.*)', raw, re.IGNORECASE)
-                if keywords_match: keywords = keywords_match.group(1).strip()
-
-                hashtags_match = re.search(r'\[HASHTAGS\]:\s*(.*)', raw, re.IGNORECASE)
-                if hashtags_match: hashtags = hashtags_match.group(1).strip()
-
-                if not header and not description:
-                    print(f"ОШИБКА ПАРСИНГА ({provider['name']}): raw={raw[:200]}")
-                    raise Exception("PARSE_ERROR")
-
-                header = header[:50]
-                return (
-                    f"--- Заголовок ({len(header)} символов) ---\n"
-                    f"{header}\n\n"
-                    f"--- Описание (продающее) ---\n"
-                    f"{description}\n\n"
-                    f"--- Ключевые слова ---\n"
-                    f"{keywords}\n\n"
-                    f"--- Хэштеги ---\n"
-                    f"{hashtags}\n"
-                )
+                return {
+                    "header": header,
+                    "description": description,
+                    "keywords": keywords,
+                    "hashtags": hashtags
+                }
 
             except Exception as e:
                 last_error = e
@@ -160,4 +145,4 @@ async def generate_full_package(product_name: str) -> str:
                     print(f"ОШИБКА {provider['name']}: {e}. Пробуем следующего...")
                     await asyncio.sleep(2)
 
-    return f"❌ Ошибка: все провайдеры недоступны. Последняя ошибка: {last_error}"
+    return {"error": f"All providers failed. Last error: {last_error}"}
