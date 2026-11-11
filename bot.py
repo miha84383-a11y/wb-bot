@@ -12,6 +12,8 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, P
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 from app import generate_full_package
 
@@ -63,6 +65,15 @@ def make_progress_bar(current: int, total: int) -> str:
 def create_pdf_file(results: list, user_id: int) -> str:
     pdf_path = f"products_{user_id}.pdf"
     c = canvas.Canvas(pdf_path, pagesize=A4)
+    
+    # Регистрируем шрифт с поддержкой кириллицы
+    try:
+        pdfmetrics.registerFont(TTFont('DejaVuSans', 'DejaVuSans.ttf'))
+        font_name = 'DejaVuSans'
+    except Exception as e:
+        print(f"Ошибка загрузки шрифта: {e}. Используем Helvetica.")
+        font_name = 'Helvetica'
+    
     width, height = A4
     margin_left = 20 * mm
     margin_top = height - 20 * mm
@@ -80,10 +91,10 @@ def create_pdf_file(results: list, user_id: int) -> str:
         keywords = res.get("keywords", "")
         hashtags = res.get("hashtags", "")
         
-        c.setFont("Helvetica-Bold", 14)
+        c.setFont(font_name, 14)
         c.drawString(margin_left, y, f"Товар: {product}")
         y -= line_height
-        c.setFont("Helvetica", 12)
+        c.setFont(font_name, 12)
         c.drawString(margin_left, y, f"Заголовок: {heading}")
         y -= line_height
         c.drawString(margin_left, y, f"Описание: {description}")
@@ -373,7 +384,6 @@ async def handle_document(message: Message):
                 try:
                     result = await asyncio.wait_for(generate_full_package(p), timeout=90.0)
                     
-                    # Проверка, что result — это словарь и в нём нет ошибки
                     if not isinstance(result, dict) or result.get("error") or not result.get("header"):
                         raise Exception(f"Provider error: {result.get('error', 'Empty header') if isinstance(result, dict) else 'Invalid response'}")
                     
