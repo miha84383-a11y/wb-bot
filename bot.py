@@ -148,23 +148,23 @@ def get_user_history(user_id: int, limit: int = 5) -> list:
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Купить 10 генераций за 50 Stars", callback_data="buy")],
-        [InlineKeyboardButton(text="👀 Пример работы", callback_data="example")],
-        [InlineKeyboardButton(text="📁 Загрузить файл", callback_data="upload_file")]
-    ])
     user_id = str(message.from_user.id)
+    if user_id not in user_access:
+        user_access[user_id] = 3
+        save_access(user_access)
+    
     balance = user_access.get(user_id, 0)
-    await message.answer(
-        f"Привет! Я генерирую полный пакет для карточек товаров:\n"
-        f"• Заголовок\n"
-        f"• Продающее описание\n"
-        f"• Ключевые слова\n"
-        f"• Хэштеги\n\n"
-        f"Отправь мне название товара, и я сделаю всё за 5 секунд!\n\n"
-        f"Ваш баланс: {balance} генераций.",
-        reply_markup=keyboard
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📁 Загрузить файл", callback_data="upload_file")],
+        [InlineKeyboardButton(text="👀 Пример работы", callback_data="example")],
+        [InlineKeyboardButton(text="📜 Правила и поддержка", callback_data="support")],
+        [InlineKeyboardButton(text="💳 Купить 10 генераций за 50 Stars", callback_data="buy")]
+    ])
+    text = (
+        "⚠️ Бот работает в тестовом режиме. Если вы столкнулись с технической ошибкой, напишите в поддержку — мы обязательно вернём генерации и поможем!\n\n"
+        f"Ваш баланс: {balance} генераций."
     )
+    await message.answer(text, reply_markup=keyboard)
 
 @router.callback_query(lambda c: c.data == "buy")
 async def process_buy(callback_query: types.CallbackQuery):
@@ -338,7 +338,7 @@ async def handle_document(message: Message):
             # Делаем до 3 попыток
             for attempt in range(3):
                 try:
-                    # Ждем ответ максимум 90 секунд (чтобы app.py успел переключиться на Z.ai)
+                    # Ждем ответ максимум 90 секунд
                     result = await asyncio.wait_for(generate_full_package(p), timeout=90.0)
                     
                     # Если провайдеры вернули ошибку
@@ -494,5 +494,17 @@ async def add_generations(callback: types.CallbackQuery):
     save_access(user_access)
     await callback.message.answer("Выдано 100 генераций.")
     await callback.answer()
+
+@router.callback_query(lambda c: c.data == "support")
+async def process_support(callback_query: types.CallbackQuery):
+    text = (
+        "📜 Правила и поддержка:\n\n"
+        "Бот работает в тестовом режиме.\n"
+        "Оплата генераций производится через Telegram Stars.\n"
+        "Если вы получили файл с ошибками (надпись 'Ошибка генерации'), мы автоматически вернём вам генерации. Если возврат не произошел, напишите сюда, и мы решим вопрос вручную.\n\n"
+        "🛠 Связь с админом: @ваш_ник_телеграм"
+    )
+    await callback_query.message.answer(text)
+    await callback_query.answer()
 
 dp.include_router(router)
