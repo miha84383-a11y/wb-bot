@@ -505,7 +505,7 @@ async def process_support(callback_query: types.CallbackQuery):
         "Пишу тексты для карточек WB и Ozon. 20 карточек — 50 Stars.\n"
         "🤖 Заказать описания прямо в Telegram-боте: @MaiVik_Text_bot\n"
         "🎁 Первое описание — бесплатно.\n"
-        "Связь: @MaiVik"
+        "Связь: @MaikVik"
     )
     await callback_query.message.answer(text)
     await callback_query.answer()
