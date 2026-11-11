@@ -14,6 +14,9 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.enums import TA_LEFT
 
 from app import generate_full_package
 
@@ -61,10 +64,9 @@ def make_progress_bar(current: int, total: int) -> str:
     bar = "█" * filled_blocks + "░" * empty_blocks
     return f"{bar} {current} из {total}"
 
-# --- Создание PDF ---
+# --- Создание PDF (с переносами строк и аккуратной версткой) ---
 def create_pdf_file(results: list, user_id: int) -> str:
     pdf_path = f"products_{user_id}.pdf"
-    c = canvas.Canvas(pdf_path, pagesize=A4)
     
     # Регистрируем шрифт с поддержкой кириллицы
     try:
@@ -74,16 +76,20 @@ def create_pdf_file(results: list, user_id: int) -> str:
         print(f"Ошибка загрузки шрифта: {e}. Используем Helvetica.")
         font_name = 'Helvetica'
     
-    width, height = A4
-    margin_left = 20 * mm
-    margin_top = height - 20 * mm
-    line_height = 15 * mm
-    y = margin_top
+    doc = SimpleDocTemplate(pdf_path, pagesize=A4,
+                            rightMargin=20*mm, leftMargin=20*mm,
+                            topMargin=20*mm, bottomMargin=20*mm)
+    
+    styles = getSampleStyleSheet()
+    style_normal = ParagraphStyle('Normal', fontName=font_name, fontSize=10, leading=14, alignment=TA_LEFT)
+    style_bold = ParagraphStyle('Bold', fontName=font_name, fontSize=12, leading=16, spaceAfter=6)
+    style_title = ParagraphStyle('Title', fontName=font_name, fontSize=16, leading=20, spaceAfter=12, alignment=1) # 1 = center
+    
+    elements = []
     
     for idx, res in enumerate(results):
         if idx > 0:
-            c.showPage()  # ИСПРАВЛЕНО: showPage вместо newPage
-            y = margin_top
+            elements.append(Spacer(1, 20*mm)) # отступ между карточками
         
         product = res.get("product", "")
         heading = res.get("heading", "")
@@ -91,21 +97,18 @@ def create_pdf_file(results: list, user_id: int) -> str:
         keywords = res.get("keywords", "")
         hashtags = res.get("hashtags", "")
         
-        c.setFont(font_name, 14)
-        c.drawString(margin_left, y, f"Товар: {product}")
-        y -= line_height
-        c.setFont(font_name, 12)
-        c.drawString(margin_left, y, f"Заголовок: {heading}")
-        y -= line_height
-        c.drawString(margin_left, y, f"Описание: {description}")
-        y -= line_height
-        c.drawString(margin_left, y, f"Ключевые слова: {keywords}")
-        y -= line_height
-        c.drawString(margin_left, y, f"Хэштеги: {hashtags}")
-        y -= line_height
-        y -= 50 * mm  # Оставляем место для фото
+        elements.append(Paragraph(f"<b>Товар:</b> {product}", style_title))
+        elements.append(Paragraph(f"<b>Заголовок:</b> {heading}", style_bold))
+        elements.append(Paragraph(f"<b>Описание:</b> {description}", style_normal))
+        elements.append(Spacer(1, 5*mm))
+        elements.append(Paragraph(f"<b>Ключевые слова:</b> {keywords}", style_normal))
+        elements.append(Spacer(1, 5*mm))
+        elements.append(Paragraph(f"<b>Хэштеги:</b> {hashtags}", style_normal))
+        
+        # Оставляем место для фото (пустой отступ)
+        elements.append(Spacer(1, 50*mm))
     
-    c.save()
+    doc.build(elements)
     return pdf_path
 
 # --- Создание XLSX (с оформлением) ---
