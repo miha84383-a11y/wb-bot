@@ -82,7 +82,7 @@ def create_pdf_file(results: list, user_id: int) -> str:
     
     for idx, res in enumerate(results):
         if idx > 0:
-            c.newPage()
+            c.showPage()  # ИСПРАВЛЕНО: showPage вместо newPage
             y = margin_top
         
         product = res.get("product", "")
