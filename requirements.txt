@@ -2,3 +2,4 @@ aiogram
 requests
 flask
 openpyxl
+reportlab
