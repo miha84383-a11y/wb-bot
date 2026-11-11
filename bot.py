@@ -9,6 +9,10 @@ from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, LabeledPrice, FSInputFile
 
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+
 from app import generate_full_package
 
 # --- Конфигурация ---
@@ -55,32 +59,43 @@ def make_progress_bar(current: int, total: int) -> str:
     bar = "█" * filled_blocks + "░" * empty_blocks
     return f"{bar} {current} из {total}"
 
-# --- Парсинг пакета ---
-def parse_package(package_text: str) -> dict:
-    sections = {"heading": "", "description": "", "keywords": "", "hashtags": ""}
-    current = None
-    for line in package_text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("--- Заголовок"):
-            current = "heading"
-            continue
-        elif stripped.startswith("--- Описание"):
-            current = "description"
-            continue
-        elif stripped.startswith("--- Ключевые слова"):
-            current = "keywords"
-            continue
-        elif stripped.startswith("--- Хэштеги"):
-            current = "hashtags"
-            continue
-        elif stripped.startswith("---"):
-            current = None
-            continue
-        if current and stripped:
-            sections[current] += stripped + " "
-    for key in sections:
-        sections[key] = sections[key].strip()
-    return sections
+# --- Создание PDF ---
+def create_pdf_file(results: list, user_id: int) -> str:
+    pdf_path = f"products_{user_id}.pdf"
+    c = canvas.Canvas(pdf_path, pagesize=A4)
+    width, height = A4
+    margin_left = 20 * mm
+    margin_top = height - 20 * mm
+    line_height = 15 * mm
+    y = margin_top
+    
+    for idx, res in enumerate(results):
+        if idx > 0:
+            c.newPage()
+            y = margin_top
+        
+        product = res.get("product", "")
+        heading = res.get("heading", "")
+        description = res.get("description", "")
+        keywords = res.get("keywords", "")
+        hashtags = res.get("hashtags", "")
+        
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(margin_left, y, f"Товар: {product}")
+        y -= line_height
+        c.setFont("Helvetica", 12)
+        c.drawString(margin_left, y, f"Заголовок: {heading}")
+        y -= line_height
+        c.drawString(margin_left, y, f"Описание: {description}")
+        y -= line_height
+        c.drawString(margin_left, y, f"Ключевые слова: {keywords}")
+        y -= line_height
+        c.drawString(margin_left, y, f"Хэштеги: {hashtags}")
+        y -= line_height
+        y -= 50 * mm  # Оставляем место для фото
+    
+    c.save()
+    return pdf_path
 
 # --- Создание XLSX (с оформлением) ---
 def create_xlsx_file(results: list, user_id: int) -> str:
@@ -196,17 +211,21 @@ async def process_example(callback_query: types.CallbackQuery):
         "Вот так выглядит готовый пакет. Хочешь сгенерировать для своего товара? Просто отправь название!"
     )
 
-    parsed = parse_package(example_package)
     example_result = {
         "product": "Термокружка",
-        "heading": parsed.get("heading", ""),
-        "description": parsed.get("description", ""),
-        "keywords": parsed.get("keywords", ""),
-        "hashtags": parsed.get("hashtags", "")
+        "heading": "Термокружка с двойной стенкой",
+        "description": "Наша термокружка удерживает напитки горячими до 12 часов и холодными до 24 часов. Эргономичная форма и надежная герметичность сделают ваш день комфортнее.",
+        "keywords": "термокружка, подарок, доставка, isotherm",
+        "hashtags": "#термокружка #подарочно #уют #купить"
     }
+    
     xlsx_path = create_xlsx_file([example_result], callback_query.from_user.id)
     await callback_query.message.answer_document(FSInputFile(xlsx_path))
     os.remove(xlsx_path)
+
+    pdf_path = create_pdf_file([example_result], callback_query.from_user.id)
+    await callback_query.message.answer_document(FSInputFile(pdf_path))
+    os.remove(pdf_path)
 
     await callback_query.answer()
 
@@ -214,8 +233,23 @@ async def process_example(callback_query: types.CallbackQuery):
 async def process_upload_file(callback_query: types.CallbackQuery):
     await callback_query.message.answer(
         "Отправьте мне файл в формате .xlsx или .csv, где в первом столбце перечислены названия товаров. "
-        "Я обработаю их и пришлю готовый файл с описаниями. Каждый товар стоит 1 генерацию."
+        "Я обработаю их и пришлю готовый Excel и PDF с описаниями. Каждый товар стоит 1 генерацию."
     )
+    await callback_query.answer()
+
+@router.callback_query(lambda c: c.data == "support")
+async def process_support(callback_query: types.CallbackQuery):
+    text = (
+        "📜 Правила и поддержка:\n\n"
+        "Бот работает в тестовом режиме. Если вы получили файл с ошибками (надпись 'Ошибка генерации'), мы автоматически вернём вам генерации. Если возврат не произошел, напишите сюда, и мы решим вопрос вручную.\n\n"
+        "💳 Оплата происходит через Telegram Stars — это официальная валюта Telegram для цифровых товаров. Это безопасно: вам не нужно вводить данные карты в боте. Купить Stars можно в настройках Telegram (Кошелек → Купить звезды) или прямо в боте при оплате.\n\n"
+        "🛠 Связь с админом:\n"
+        "Пишу тексты для карточек WB и Ozon. 20 карточек — 50 Stars.\n"
+        "🤖 Заказать описания прямо в Telegram-боте: @MaiVik_Text_bot\n"
+        "🎁 Первое описание — бесплатно.\n"
+        "💬 По всем вопросам пишите в чат обсуждения под постами: https://t.me/wb_ozon_opisaniya"
+    )
+    await callback_query.message.answer(text)
     await callback_query.answer()
 
 @router.pre_checkout_query()
@@ -339,8 +373,9 @@ async def handle_document(message: Message):
                 try:
                     result = await asyncio.wait_for(generate_full_package(p), timeout=90.0)
                     
-                    if result.startswith("❌") or result.startswith("⚠️") or result.startswith("❗️"):
-                        raise Exception(f"Provider error: {result}")
+                    # Проверка, что result — это словарь и в нём нет ошибки
+                    if not isinstance(result, dict) or result.get("error") or not result.get("header"):
+                        raise Exception(f"Provider error: {result.get('error', 'Empty header') if isinstance(result, dict) else 'Invalid response'}")
                     
                     success = True
                     break
@@ -365,14 +400,13 @@ async def handle_document(message: Message):
         for j, result in enumerate(group_results):
             if isinstance(result, Exception):
                 all_results.append({"product": group[j], "heading": "Ошибка генерации", "description": "", "keywords": "", "hashtags": ""})
-            elif isinstance(result, str):
-                parsed = parse_package(result)
+            elif isinstance(result, dict):
                 all_results.append({
                     "product": group[j],
-                    "heading": parsed.get("heading", ""),
-                    "description": parsed.get("description", ""),
-                    "keywords": parsed.get("keywords", ""),
-                    "hashtags": parsed.get("hashtags", "")
+                    "heading": result.get("header", "")[:50],
+                    "description": result.get("description", ""),
+                    "keywords": result.get("keywords", ""),
+                    "hashtags": result.get("hashtags", "")
                 })
 
         processed = min(i + group_size, product_count)
@@ -398,9 +432,15 @@ async def handle_document(message: Message):
         if i + group_size < product_count:
             await asyncio.sleep(2)
 
+    # Создаем и отправляем Excel
     xlsx_path = create_xlsx_file(all_results, int(user_id))
     await message.answer_document(FSInputFile(xlsx_path))
     os.remove(xlsx_path)
+
+    # Создаем и отправляем PDF
+    pdf_path = create_pdf_file(all_results, int(user_id))
+    await message.answer_document(FSInputFile(pdf_path))
+    os.remove(pdf_path)
 
     # --- ВОЗВРАТ СРЕДСТВ ЗА ОШИБКИ ---
     failed_count = sum(1 for res in all_results if res.get("heading") == "Ошибка генерации")
@@ -438,21 +478,40 @@ async def handle_text(message: Message):
 
     product_name = message.text
     package = await generate_full_package(product_name)
-    add_to_history(message.from_user.id, product_name, package)
+    
+    if not isinstance(package, dict) or package.get("error"):
+        await message.answer(f"❌ Ошибка генерации: {package.get('error', 'Неизвестная ошибка')}")
+        return
 
-    await message.answer(package)
+    add_to_history(message.from_user.id, product_name, str(package))
 
-    parsed = parse_package(package)
+    answer_text = (
+        f"--- Заголовок ({len(package.get('header', ''))} символов) ---\n"
+        f"{package.get('header', '')}\n\n"
+        f"--- Описание (продающее) ---\n"
+        f"{package.get('description', '')}\n\n"
+        f"--- Ключевые слова ---\n"
+        f"{package.get('keywords', '')}\n\n"
+        f"--- Хэштеги ---\n"
+        f"{package.get('hashtags', '')}"
+    )
+    await message.answer(answer_text)
+
     result = {
         "product": product_name,
-        "heading": parsed.get("heading", ""),
-        "description": parsed.get("description", ""),
-        "keywords": parsed.get("keywords", ""),
-        "hashtags": parsed.get("hashtags", "")
+        "heading": package.get("header", "")[:50],
+        "description": package.get("description", ""),
+        "keywords": package.get("keywords", ""),
+        "hashtags": package.get("hashtags", "")
     }
+    
     xlsx_path = create_xlsx_file([result], message.from_user.id)
     await message.answer_document(FSInputFile(xlsx_path))
     os.remove(xlsx_path)
+
+    pdf_path = create_pdf_file([result], message.from_user.id)
+    await message.answer_document(FSInputFile(pdf_path))
+    os.remove(pdf_path)
 
     if PAYMENTS_ENABLED:
         await message.answer(f"Хочешь сгенерировать ещё? У тебя осталось {user_access[user_id]} генераций.")
@@ -490,20 +549,5 @@ async def add_generations(callback: types.CallbackQuery):
     save_access(user_access)
     await callback.message.answer("Выдано 100 генераций.")
     await callback.answer()
-
-@router.callback_query(lambda c: c.data == "support")
-async def process_support(callback_query: types.CallbackQuery):
-    text = (
-        "📜 Правила и поддержка:\n\n"
-        "Бот работает в тестовом режиме. Если вы получили файл с ошибками (надпись 'Ошибка генерации'), мы автоматически вернём вам генерации. Если возврат не произошел, напишите сюда, и мы решим вопрос вручную.\n\n"
-        "💳 Оплата происходит через Telegram Stars — это официальная валюта Telegram для цифровых товаров. Это безопасно: вам не нужно вводить данные карты в боте. Купить Stars можно в настройках Telegram (Кошелек → Купить звезды) или прямо в боте при оплате.\n\n"
-        "🛠 Связь с админом:\n"
-        "Пишу тексты для карточек WB и Ozon. 20 карточек — 50 Stars.\n"
-        "🤖 Заказать описания прямо в Telegram-боте: @MaiVik_Text_bot\n"
-        "🎁 Первое описание — бесплатно.\n"
-        "💬 По всем вопросам пишите в чат обсуждения под постами: https://t.me/wb_ozon_opisaniya"
-    )
-    await callback_query.message.answer(text)
-    await callback_query.answer()
 
 dp.include_router(router)
