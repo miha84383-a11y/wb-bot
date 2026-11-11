@@ -15,7 +15,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.enums import TA_LEFT
 
 from app import generate_full_package
@@ -64,7 +64,7 @@ def make_progress_bar(current: int, total: int) -> str:
     bar = "█" * filled_blocks + "░" * empty_blocks
     return f"{bar} {current} из {total}"
 
-# --- Создание PDF (с переносами строк и аккуратной версткой) ---
+# --- Создание PDF (с переносами строк и разрывом страниц) ---
 def create_pdf_file(results: list, user_id: int) -> str:
     pdf_path = f"products_{user_id}.pdf"
     
@@ -83,13 +83,14 @@ def create_pdf_file(results: list, user_id: int) -> str:
     styles = getSampleStyleSheet()
     style_normal = ParagraphStyle('Normal', fontName=font_name, fontSize=10, leading=14, alignment=TA_LEFT)
     style_bold = ParagraphStyle('Bold', fontName=font_name, fontSize=12, leading=16, spaceAfter=6)
-    style_title = ParagraphStyle('Title', fontName=font_name, fontSize=16, leading=20, spaceAfter=12, alignment=1) # 1 = center
+    style_title = ParagraphStyle('Title', fontName=font_name, fontSize=16, leading=20, spaceAfter=12, alignment=1)
     
     elements = []
     
     for idx, res in enumerate(results):
+        # Разрыв страницы перед каждым товаром (кроме первого)
         if idx > 0:
-            elements.append(Spacer(1, 20*mm)) # отступ между карточками
+            elements.append(PageBreak())
         
         product = res.get("product", "")
         heading = res.get("heading", "")
@@ -105,7 +106,7 @@ def create_pdf_file(results: list, user_id: int) -> str:
         elements.append(Spacer(1, 5*mm))
         elements.append(Paragraph(f"<b>Хэштеги:</b> {hashtags}", style_normal))
         
-        # Оставляем место для фото (пустой отступ)
+        # Оставляем место для фото
         elements.append(Spacer(1, 50*mm))
     
     doc.build(elements)
