@@ -2,7 +2,6 @@
 import os
 import asyncio
 import csv
-import tempfile
 from pathlib import Path
 from flask import Flask, request, render_template_string, send_file, jsonify
 from werkzeug.utils import secure_filename
@@ -15,120 +14,227 @@ app = Flask(__name__)
 TEMP_DIR = Path(__file__).parent / "temp_files"
 TEMP_DIR.mkdir(exist_ok=True)
 
-# --- HTML шаблон (с двумя формами и AJAX) ---
+# --- HTML шаблон (темная тема, две колонки, предпросмотр) ---
 HTML_TEMPLATE = """
 <!doctype html>
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>Генератор описаний WB/Ozon</title>
+    <title>CardGen AI - Генератор описаний</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: system-ui, sans-serif; background: #fff; margin: 0; padding: 2rem; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-        .card { background: #fafafa; border: 1px solid #ddd; border-radius: 8px; padding: 2rem; box-shadow: 0 2px 6px rgba(0,0,0,0.1); max-width: 800px; width: 100%; }
-        h1 { margin-top: 0; }
-        .form-group { margin-bottom: 1rem; }
-        .btn { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.2rem; background: #3b82f6; color: #fff; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
-        .btn:hover { background: #2563eb; }
-        .error { color: #b00; margin-bottom: 1rem; }
-        .description { margin-top: 1rem; padding: 1rem; background: #e5e7eb; border: 1px solid #9ca3af; border-radius: 4px; white-space: pre-wrap; }
-        .download-btn { display: inline-block; margin-top: 1rem; margin-right: 1rem; padding: 0.6rem 1.2rem; background: #10b981; color: #fff; text-decoration: none; border-radius: 4px; }
-        .progress { color: #666; font-style: italic; margin-top: 1rem; }
+        :root {
+            --bg-page: #0b0c10;
+            --card-bg: #1a1c23;
+            --primary-gradient: linear-gradient(135deg, #a855f7, #3b82f6);
+            --text-white: #ffffff;
+            --text-gray: #a0a0b0;
+            --border: #2e303a;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            background: var(--bg-page);
+            margin: 0; padding: 2rem; display: flex; min-height: 100vh;
+            color: var(--text-white);
+        }
+        .main-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            width: 100%; max-width: 1200px; margin: auto; overflow: hidden;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
+            padding: 2rem;
+        }
+        .left-column, .right-column { padding: 1rem; }
+        h1 { font-size: 32px; color: var(--text-white); margin: 0 0 0.5rem; }
+        .subtitle { color: var(--text-gray); font-size: 14px; margin-bottom: 2rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; font-size: 14px; color: var(--text-gray); margin-bottom: 0.5rem; }
+        .input-field {
+            width: 100%; padding: 0.875rem 1rem; background: #1e2029; 
+            border: 1px solid var(--border); border-radius: 8px; 
+            font-family: inherit; font-size: 14px; color: var(--text-white); 
+            transition: border-color 0.2s;
+        }
+        .input-field:focus { outline: none; border-color: #7c3aed; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.5rem; 
+            padding: 0.875rem 1.5rem; background: var(--primary-gradient); color: white; 
+            border: none; border-radius: 12px; font-family: inherit; font-size: 14px; 
+            font-weight: 500; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; 
+            margin-top: 0.5rem; width: 100%; justify-content: center;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,58,237,0.3); }
+        .btn:active { transform: translateY(0); }
+        .file-upload {
+            border: 2px dashed var(--border); border-radius: 8px; padding: 2rem; 
+            text-align: center; transition: border-color 0.2s, background 0.2s; cursor: pointer;
+        }
+        .file-upload:hover { border-color: #7c3aed; }
+        .file-upload.drag-over { border-color: #7c3aed; background: rgba(124,58,237,0.05); }
+        .upload-icon { width: 48px; height: 48px; margin: 0 auto 0.75rem; fill: var(--text-gray); }
+        .upload-text { color: var(--text-gray); font-size: 14px; margin-top: 0.25rem; display: block; }
+        .upload-hint { font-size: 12px; color: #6b7280; margin-top: 0.5rem; display: block; }
+        .preview-card {
+            background: #1e2029; border-radius: 12px; padding: 1.5rem; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2); height: 100%;
+        }
+        .preview-stripes {
+            height: 30px; background: repeating-linear-gradient(45deg,#2e303a,#2e303a 4px,#23252d 4px,#23252d 8px); 
+            border-radius: 4px; margin-bottom: 1rem;
+        }
+        .preview-image {
+            width: 60px; height: 60px; background: #2e303a; border-radius: 6px; 
+            margin: 1rem auto; display: flex; align-items: center; justify-content: center; 
+            color: #6b7280; font-size: 12px;
+        }
+        .preview-line { height: 10px; background: #2e303a; border-radius: 4px; margin: 0.75rem 0; }
+        .preview-line.short { width: 60%; }
+        .rating { display: flex; gap: 2px; margin-top: 1rem; }
+        .rating-star { width: 16px; height: 16px; background: #fbbf24; border-radius: 2px; }
+        .rating-star.empty { background: #2e303a; }
+        .copy-btn-small {
+            background: #2e303a; color: var(--text-white); border: none; padding: 0.5rem 1rem; 
+            border-radius: 4px; font-size: 12px; margin-top: 1rem; cursor: pointer;
+        }
+        .copy-btn-small:hover { background: #3e4050; }
+        #progress { display: none; margin: 1rem 0; color: var(--text-gray); }
+        #error { display: none; color: #f87171; margin: 1rem 0; }
+        #result { display: none; margin: 1rem 0; white-space: pre-wrap; font-size: 14px; }
+        #downloads { margin-top: 1rem; }
+        .download-btn { 
+            display: inline-block; margin-right: 1rem; margin-top: 0.5rem; padding: 0.5rem 1rem; 
+            background: #10b981; color: white; text-decoration: none; border-radius: 6px; font-size: 14px;
+        }
+        .download-btn:hover { background: #059669; }
+        @media (max-width: 768px) {
+            .main-card { grid-template-columns: 1fr; }
+            .right-column { order: -1; }
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Генератор описаний товаров</h1>
-
-        <div class="form-group">
-            <label for="product">Название товара (для одного товара):</label><br>
-            <input type="text" id="product" name="product" placeholder="Введите название товара">
-            <button type="button" class="btn" onclick="generateSingle()">Сгенерировать описание</button>
+    <div class="main-card">
+        <div class="left-column">
+            <h1>CardGen AI</h1>
+            <p class="subtitle">Генератор описаний товаров для Wildberries и Ozon</p>
+            <div class="form-group">
+                <label for="product">Название товара:</label>
+                <input type="text" id="product" class="input-field" placeholder="Введите название товара" autocomplete="off"/>
+                <button type="button" class="btn" onclick="generateSingle()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Сгенерировать
+                </button>
+            </div>
+            <div class="form-group" style="margin-top: 2rem;">
+                <label for="file">Загрузить файл:</label>
+                <div class="file-upload" id="fileUpload" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" onclick="document.getElementById('fileInput').click()">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 3 12 7 7 3"/></svg>
+                    <span class="upload-text">Перетащите .xlsx или .csv</span>
+                    <span class="upload-hint">или кликните для выбора файла</span>
+                </div>
+                <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none"/>
+                <button type="button" class="btn" onclick="generateFile()" style="margin-top: 1rem;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Обработать файл
+                </button>
+            </div>
+            <div id="progress" class="progress">Обработка...</div>
+            <div id="error" class="error"></div>
+            <div id="result" class="description"></div>
+            <div id="downloads"></div>
         </div>
-
-        <div class="form-group">
-            <label for="file">Загрузить файл (.xlsx или .csv) для обработки нескольких товаров:</label><br>
-            <input type="file" id="file" name="file" accept=".xlsx,.csv">
-            <button type="button" class="btn" onclick="generateFile()">Обработать файл</button>
+        <div class="right-column">
+            <div class="preview-card" id="previewCard">
+                <div class="preview-stripes"></div>
+                <div class="preview-line short"></div>
+                <div class="preview-line"></div>
+                <div class="preview-line"></div>
+                <div class="preview-image">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                </div>
+                <div class="preview-line"></div>
+                <div class="preview-line short"></div>
+                <div class="rating">
+                    <div class="rating-star"></div>
+                    <div class="rating-star"></div>
+                    <div class="rating-star"></div>
+                    <div class="rating-star"></div>
+                    <div class="rating-star empty"></div>
+                </div>
+                <button class="copy-btn-small" onclick="copyPreview()">Копировать</button>
+            </div>
         </div>
-
-        <div id="progress" class="progress" style="display:none;">Обработка...</div>
-        <div id="error" class="error" style="display:none;"></div>
-        <div id="result" class="description" style="display:none;"></div>
-        <div id="downloads"></div>
     </div>
-
     <script>
+        function showElement(id, show) {
+            document.getElementById(id).style.display = show ? 'block' : 'none';
+        }
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('fileUpload').classList.add('drag-over');
+        }
+        function handleDragLeave(e) {
+            document.getElementById('fileUpload').classList.remove('drag-over');
+        }
         async function generateSingle() {
             const product = document.getElementById('product').value.trim();
-            if (!product) {
-                alert('Введите название товара');
-                return;
-            }
-            document.getElementById('progress').style.display = 'block';
-            document.getElementById('error').style.display = 'none';
-            document.getElementById('result').style.display = 'none';
+            if (!product) { alert('Введите название товара'); return; }
+            showElement('progress', true); showElement('error', false); showElement('result', false);
             document.getElementById('downloads').innerHTML = '';
-
             try {
                 const resp = await fetch('/generate_single', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({product_name: product})
                 });
                 const data = await resp.json();
-                document.getElementById('progress').style.display = 'none';
+                showElement('progress', false);
                 if (data.error) {
+                    showElement('error', true);
                     document.getElementById('error').textContent = '❌ ' + data.error;
-                    document.getElementById('error').style.display = 'block';
                 } else {
+                    showElement('result', true);
                     document.getElementById('result').textContent = data.description;
-                    document.getElementById('result').style.display = 'block';
                     document.getElementById('downloads').innerHTML =
                         `<a href="/download_file?file=${encodeURIComponent(data.pdf_file)}" class="download-btn">📄 Скачать PDF</a>` +
                         `<a href="/download_file?file=${encodeURIComponent(data.xlsx_file)}" class="download-btn">📊 Скачать Excel</a>`;
                 }
             } catch (e) {
-                document.getElementById('progress').style.display = 'none';
+                showElement('progress', false); showElement('error', true);
                 document.getElementById('error').textContent = '❌ Ошибка сети: ' + e.message;
-                document.getElementById('error').style.display = 'block';
             }
         }
-
         async function generateFile() {
-            const fileInput = document.getElementById('file');
-            if (!fileInput.files.length) {
-                alert('Выберите файл');
-                return;
-            }
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files.length) { alert('Выберите файл'); return; }
             const file = fileInput.files[0];
             const formData = new FormData();
             formData.append('file', file);
-
-            document.getElementById('progress').style.display = 'block';
-            document.getElementById('error').style.display = 'none';
-            document.getElementById('result').style.display = 'none';
+            showElement('progress', true); showElement('error', false); showElement('result', false);
             document.getElementById('downloads').innerHTML = '';
-
             try {
                 const resp = await fetch('/generate_file', { method: 'POST', body: formData });
                 const data = await resp.json();
-                document.getElementById('progress').style.display = 'none';
+                showElement('progress', false);
                 if (data.error) {
+                    showElement('error', true);
                     document.getElementById('error').textContent = '❌ ' + data.error;
-                    document.getElementById('error').style.display = 'block';
                 } else {
+                    showElement('result', true);
                     document.getElementById('result').textContent = data.message;
-                    document.getElementById('result').style.display = 'block';
                     document.getElementById('downloads').innerHTML =
                         `<a href="/download_file?file=${encodeURIComponent(data.xlsx_file)}" class="download-btn">📊 Скачать Excel</a>` +
                         `<a href="/download_file?file=${encodeURIComponent(data.pdf_file)}" class="download-btn">📄 Скачать PDF</a>`;
                 }
             } catch (e) {
-                document.getElementById('progress').style.display = 'none';
+                showElement('progress', false); showElement('error', true);
                 document.getElementById('error').textContent = '❌ Ошибка сети: ' + e.message;
-                document.getElementById('error').style.display = 'block';
             }
         }
+        function copyPreview() {
+            const preview = document.getElementById('previewCard').innerText;
+            navigator.clipboard.writeText(preview).then(() => { alert('Текст скопирован!'); });
+        }
+        document.getElementById('product').focus();
     </script>
 </body>
 </html>
