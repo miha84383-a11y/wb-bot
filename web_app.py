@@ -1,4 +1,4 @@
-# web_app.py
+﻿# web_app.py
 import os
 import asyncio
 import csv
@@ -10,11 +10,9 @@ from app import generate_full_package
 
 app = Flask(__name__)
 
-# Папка для временных файлов
 TEMP_DIR = Path(__file__).parent / "temp_files"
 TEMP_DIR.mkdir(exist_ok=True)
 
-# --- HTML шаблон (темная тема, две колонки, предпросмотр) ---
 HTML_TEMPLATE = """
 <!doctype html>
 <html lang="ru">
@@ -195,8 +193,8 @@ HTML_TEMPLATE = """
                     showElement('result', true);
                     document.getElementById('result').textContent = data.description;
                     document.getElementById('downloads').innerHTML =
-                        `<a href="/download_file?file=${encodeURIComponent(data.pdf_file)}" class="download-btn">📄 Скачать PDF</a>` +
-                        `<a href="/download_file?file=${encodeURIComponent(data.xlsx_file)}" class="download-btn">📊 Скачать Excel</a>`;
+                        <a href="/download_file?file=" class="download-btn">📄 Скачать PDF</a> +
+                        <a href="/download_file?file=" class="download-btn">📊 Скачать Excel</a>;
                 }
             } catch (e) {
                 showElement('progress', false); showElement('error', true);
@@ -222,8 +220,8 @@ HTML_TEMPLATE = """
                     showElement('result', true);
                     document.getElementById('result').textContent = data.message;
                     document.getElementById('downloads').innerHTML =
-                        `<a href="/download_file?file=${encodeURIComponent(data.xlsx_file)}" class="download-btn">📊 Скачать Excel</a>` +
-                        `<a href="/download_file?file=${encodeURIComponent(data.pdf_file)}" class="download-btn">📄 Скачать PDF</a>`;
+                        <a href="/download_file?file=" class="download-btn">📊 Скачать Excel</a> +
+                        <a href="/download_file?file=" class="download-btn">📄 Скачать PDF</a>;
                 }
             } catch (e) {
                 showElement('progress', false); showElement('error', true);
@@ -239,8 +237,6 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
-
-# --- Вспомогательные функции ---
 
 def create_xlsx_file(results: list, user_id: int = 0) -> str:
     from openpyxl import Workbook
@@ -313,8 +309,6 @@ def create_pdf_file(results: list, user_id: int = 0) -> str:
         elements.append(Spacer(1, 50*mm))
     doc.build(elements)
     return pdf_path
-
-# --- Маршруты ---
 
 @app.route("/")
 def index():
